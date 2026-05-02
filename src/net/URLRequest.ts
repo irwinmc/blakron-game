@@ -1,24 +1,28 @@
+import type { URLRequestHeader } from './URLRequestHeader.js';
+import { URLRequestMethod } from './URLRequestMethod.js';
+
 /**
- * Represents an HTTP request, Egret-compatible.
+ * Captures all information in a single HTTP request, Egret-compatible.
  *
  * @example
  * ```ts
  * const req = new URLRequest('https://example.com/data.json');
- * req.method = 'POST';
+ * req.method = URLRequestMethod.POST;
  * req.data = JSON.stringify({ key: 'value' });
+ * req.requestHeaders.push(new URLRequestHeader('Content-Type', 'application/json'));
  * ```
  */
 export class URLRequest {
-	/** Request URL */
-	url: string;
-	/** HTTP method (default: 'GET') */
-	method: string = 'GET';
-	/** Request body data */
-	data: string | ArrayBuffer | null = null;
-	/** Additional request headers */
-	headers: Record<string, string> = {};
+	// ── Instance fields ───────────────────────────────────────────────────────
 
-	constructor(url = '') {
+	public url: string;
+	public method: string = URLRequestMethod.GET;
+	public data: string | ArrayBuffer | undefined;
+	public requestHeaders: URLRequestHeader[] = [];
+
+	// ── Constructor ───────────────────────────────────────────────────────────
+
+	public constructor(url = '') {
 		this.url = url;
 	}
 }

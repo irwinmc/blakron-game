@@ -4,43 +4,72 @@ import type { EaseFunction } from './types.js';
  * Collection of easing functions compatible with Egret's Ease API.
  *
  * All functions take a normalized time t ∈ [0, 1] and return an eased value.
+ * Factory methods (getPowIn, getElasticOut, etc.) mirror the original Egret API.
  *
  * @example
  * ```ts
  * Tween.get(obj).to({ x: 100 }, 500, Ease.cubicOut);
+ * Tween.get(obj).to({ x: 100 }, 500, Ease.getPowOut(4));
  * ```
  */
 export const Ease = {
-	// ── Linear ──────────────────────────────────────────────────────────
-	/** No easing */
+	// ── Linear ───────────────────────────────────────────────────────────────
 	linear: (t: number): number => t,
 
-	// ── Sine ────────────────────────────────────────────────────────────
+	// ── Configurable factories ────────────────────────────────────────────────
+	get: (amount: number): EaseFunction => {
+		const a = Math.max(-1, Math.min(1, amount));
+		return (t: number): number => {
+			if (a === 0) return t;
+			if (a < 0) return t * (t * -a + 1 + a);
+			return t * ((2 - t) * a + (1 - a));
+		};
+	},
+
+	getPowIn:
+		(pow: number): EaseFunction =>
+		(t: number): number =>
+			Math.pow(t, pow),
+
+	getPowOut:
+		(pow: number): EaseFunction =>
+		(t: number): number =>
+			1 - Math.pow(1 - t, pow),
+
+	getPowInOut:
+		(pow: number): EaseFunction =>
+		(t: number): number => {
+			const t2 = t * 2;
+			if (t2 < 1) return 0.5 * Math.pow(t2, pow);
+			return 1 - 0.5 * Math.abs(Math.pow(2 - t2, pow));
+		},
+
+	// ── Sine ─────────────────────────────────────────────────────────────────
 	sineIn: (t: number): number => 1 - Math.cos((t * Math.PI) / 2),
 	sineOut: (t: number): number => Math.sin((t * Math.PI) / 2),
 	sineInOut: (t: number): number => -(Math.cos(Math.PI * t) - 1) / 2,
 
-	// ── Quad ────────────────────────────────────────────────────────────
+	// ── Quad ─────────────────────────────────────────────────────────────────
 	quadIn: (t: number): number => t * t,
 	quadOut: (t: number): number => t * (2 - t),
 	quadInOut: (t: number): number => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
 
-	// ── Cubic ───────────────────────────────────────────────────────────
+	// ── Cubic ─────────────────────────────────────────────────────────────────
 	cubicIn: (t: number): number => t * t * t,
 	cubicOut: (t: number): number => --t * t * t + 1,
 	cubicInOut: (t: number): number => (t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1),
 
-	// ── Quart ───────────────────────────────────────────────────────────
+	// ── Quart ─────────────────────────────────────────────────────────────────
 	quartIn: (t: number): number => t * t * t * t,
 	quartOut: (t: number): number => 1 - --t * t * t * t,
 	quartInOut: (t: number): number => (t < 0.5 ? 8 * t * t * t * t : 1 - 8 * --t * t * t * t),
 
-	// ── Quint ───────────────────────────────────────────────────────────
+	// ── Quint ─────────────────────────────────────────────────────────────────
 	quintIn: (t: number): number => t * t * t * t * t,
 	quintOut: (t: number): number => 1 + --t * t * t * t * t,
 	quintInOut: (t: number): number => (t < 0.5 ? 16 * t * t * t * t * t : 1 + 16 * --t * t * t * t * t),
 
-	// ── Expo ────────────────────────────────────────────────────────────
+	// ── Expo ─────────────────────────────────────────────────────────────────
 	expoIn: (t: number): number => (t === 0 ? 0 : Math.pow(2, 10 * t - 10)),
 	expoOut: (t: number): number => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
 	expoInOut: (t: number): number => {
@@ -49,32 +78,71 @@ export const Ease = {
 		return t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2;
 	},
 
-	// ── Circ ────────────────────────────────────────────────────────────
+	// ── Circ ─────────────────────────────────────────────────────────────────
 	circIn: (t: number): number => 1 - Math.sqrt(1 - t * t),
 	circOut: (t: number): number => Math.sqrt(1 - --t * t),
 	circInOut: (t: number): number =>
 		t < 0.5 ? (1 - Math.sqrt(1 - 4 * t * t)) / 2 : (Math.sqrt(1 - (-2 * t + 2) * (-2 * t + 2)) + 1) / 2,
 
-	// ── Back ────────────────────────────────────────────────────────────
-	backIn: (t: number): number => {
-		const c1 = 1.70158;
-		const c3 = c1 + 1;
-		return c3 * t * t * t - c1 * t * t;
+	// ── Back ─────────────────────────────────────────────────────────────────
+	getBackIn:
+		(amount: number): EaseFunction =>
+		(t: number): number =>
+			t * t * ((amount + 1) * t - amount),
+
+	getBackOut:
+		(amount: number): EaseFunction =>
+		(t: number): number =>
+			--t * t * ((amount + 1) * t + amount) + 1,
+
+	getBackInOut: (amount: number): EaseFunction => {
+		const a = amount * 1.525;
+		return (t: number): number => {
+			const t2 = t * 2;
+			if (t2 < 1) return 0.5 * (t2 * t2 * ((a + 1) * t2 - a));
+			return 0.5 * ((t2 - 2) * (t2 - 2) * ((a + 1) * (t2 - 2) + a) + 2);
+		};
 	},
-	backOut: (t: number): number => {
-		const c1 = 1.70158;
-		const c3 = c1 + 1;
-		return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-	},
+
+	backIn: (t: number): number => t * t * (2.70158 * t - 1.70158),
+	backOut: (t: number): number => --t * t * (2.70158 * t + 1.70158) + 1,
 	backInOut: (t: number): number => {
-		const c1 = 1.70158;
-		const c2 = c1 * 1.525;
+		const c2 = 1.70158 * 1.525;
 		return t < 0.5
 			? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2
 			: (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
 	},
 
-	// ── Elastic ─────────────────────────────────────────────────────────
+	// ── Elastic ───────────────────────────────────────────────────────────────
+	getElasticIn: (amplitude: number, period: number): EaseFunction => {
+		const pi2 = Math.PI * 2;
+		return (t: number): number => {
+			if (t === 0 || t === 1) return t;
+			const s = (period / pi2) * Math.asin(1 / amplitude);
+			return -(amplitude * Math.pow(2, 10 * (t -= 1)) * Math.sin(((t - s) * pi2) / period));
+		};
+	},
+
+	getElasticOut: (amplitude: number, period: number): EaseFunction => {
+		const pi2 = Math.PI * 2;
+		return (t: number): number => {
+			if (t === 0 || t === 1) return t;
+			const s = (period / pi2) * Math.asin(1 / amplitude);
+			return amplitude * Math.pow(2, -10 * t) * Math.sin(((t - s) * pi2) / period) + 1;
+		};
+	},
+
+	getElasticInOut: (amplitude: number, period: number): EaseFunction => {
+		const pi2 = Math.PI * 2;
+		return (t: number): number => {
+			const s = (period / pi2) * Math.asin(1 / amplitude);
+			const t2 = t * 2;
+			if (t2 < 1)
+				return -0.5 * (amplitude * Math.pow(2, 10 * (t2 - 1)) * Math.sin(((t2 - 1 - s) * pi2) / period));
+			return amplitude * Math.pow(2, -10 * (t2 - 1)) * Math.sin(((t2 - 1 - s) * pi2) / period) * 0.5 + 1;
+		};
+	},
+
 	elasticIn: (t: number): number => {
 		if (t === 0) return 0;
 		if (t === 1) return 1;
@@ -93,7 +161,7 @@ export const Ease = {
 			: (Math.pow(2, -20 * t + 10) * Math.sin(((20 * t - 11.125) * (2 * Math.PI)) / 4.5)) / 2 + 1;
 	},
 
-	// ── Bounce ──────────────────────────────────────────────────────────
+	// ── Bounce ────────────────────────────────────────────────────────────────
 	bounceOut: (t: number): number => {
 		const n1 = 7.5625;
 		const d1 = 2.75;
@@ -108,13 +176,8 @@ export const Ease = {
 
 	/**
 	 * Create a custom cubic bezier easing function.
-	 * @param x1 Control point 1 x
-	 * @param y1 Control point 1 y
-	 * @param x2 Control point 2 x
-	 * @param y2 Control point 2 y
 	 */
 	cubicBezier(x1: number, y1: number, x2: number, y2: number): EaseFunction {
-		// Newton-Raphson approximation
 		return (t: number): number => {
 			let x = t;
 			for (let i = 0; i < 8; i++) {

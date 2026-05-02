@@ -44,6 +44,12 @@ export class ScrollView extends Sprite {
 
 	public horizontalScrollPolicy: ScrollPolicy = ScrollPolicy.AUTO;
 	public verticalScrollPolicy: ScrollPolicy = ScrollPolicy.AUTO;
+	/** Minimum touch movement in px before scrolling begins. */
+	public scrollBeginThreshold = 10;
+	/** Scroll speed multiplier. */
+	public scrollSpeed = 1;
+	/** Whether to allow over-scroll bounce. */
+	public bounces = true;
 
 	private _content?: Sprite;
 	private _scrollLeft = 0;
@@ -57,6 +63,9 @@ export class ScrollView extends Sprite {
 	private _touchLastX = 0;
 	private _touchLastY = 0;
 	private _touchLastTime = 0;
+	private _touchStartX = 0;
+	private _touchStartY = 0;
+	private _scrollStarted = false;
 	private _samples: VelocitySample[] = [];
 
 	// Inertia
@@ -64,6 +73,11 @@ export class ScrollView extends Sprite {
 	private _velY = 0;
 	private _inertiaActive = false;
 	private _lastInertiaTime = 0;
+	// Tween scroll
+	private _tweenTarget?: { left: number; top: number };
+	private _tweenStart?: { left: number; top: number };
+	private _tweenElapsed = 0;
+	private _tweenDuration = 0;
 
 	// ── Constructor ───────────────────────────────────────────────────────────
 
@@ -138,6 +152,74 @@ export class ScrollView extends Sprite {
 		this._updateScrollBounds();
 	}
 
+	/**
+	 * Remove the current content object.
+	 */
+	public removeContent(): void {
+		if (!this._content) return;
+		this.removeChild(this._content);
+		this._content = undefined;
+		this._updateScrollRect();
+		this._updateScrollBounds();
+	}
+
+	/**
+	 * Set both scroll axes simultaneously.
+	 * @param top Vertical scroll position
+	 * @param left Horizontal scroll position
+	 * @param isOffset If true, values are treated as deltas relative to current position
+	 */
+	public setScrollPosition(top: number, left: number, isOffset = false): void {
+		if (isOffset) {
+			this._setScroll(
+				this._scrollLeft + left * this.scrollSpeed,
+				this._scrollTop + top * this.scrollSpeed,
+				this.bounces,
+			);
+		} else {
+			this._setScroll(left, top);
+		}
+		this.dispatchEventWith(Event.CHANGE);
+	}
+
+	/**
+	 * Scroll to the given vertical position, optionally with a tween duration.
+	 * @param scrollTop Target vertical scroll position
+	 * @param duration Tween duration in ms (0 = instant)
+	 */
+	public setScrollTop(scrollTop: number, duration = 0): void {
+		const target = Math.max(0, Math.min(scrollTop, this._maxScrollTop));
+		if (duration === 0) {
+			this.scrollTop = target;
+			return;
+		}
+		this._tweenScroll(this._scrollLeft, target, duration);
+	}
+
+	/**
+	 * Scroll to the given horizontal position, optionally with a tween duration.
+	 * @param scrollLeft Target horizontal scroll position
+	 * @param duration Tween duration in ms (0 = instant)
+	 */
+	public setScrollLeft(scrollLeft: number, duration = 0): void {
+		const target = Math.max(0, Math.min(scrollLeft, this._maxScrollLeft));
+		if (duration === 0) {
+			this.scrollLeft = target;
+			return;
+		}
+		this._tweenScroll(target, this._scrollTop, duration);
+	}
+
+	/** Maximum horizontal scroll distance. */
+	public getMaxScrollLeft(): number {
+		return this._maxScrollLeft;
+	}
+
+	/** Maximum vertical scroll distance. */
+	public getMaxScrollTop(): number {
+		return this._maxScrollTop;
+	}
+
 	// ── Override methods ──────────────────────────────────────────────────────
 
 	public override onRemoveFromStage(): void {
@@ -153,13 +235,17 @@ export class ScrollView extends Sprite {
 		if (this._touchActive) return;
 		this._touchActive = true;
 		this._touchId = touch.touchPointID;
+		this._touchStartX = touch.stageX;
+		this._touchStartY = touch.stageY;
 		this._touchLastX = touch.stageX;
 		this._touchLastY = touch.stageY;
 		this._touchLastTime = Date.now();
+		this._scrollStarted = false;
 		this._samples = [];
 		this._velX = 0;
 		this._velY = 0;
 		this._stopInertia();
+		this._stopTweenScroll();
 
 		const stage = this.stage;
 		if (!stage) return;
@@ -171,6 +257,14 @@ export class ScrollView extends Sprite {
 	private _handleTouchMove = (e: Event): void => {
 		const touch = e as TouchEvent;
 		if (!this._touchActive || touch.touchPointID !== this._touchId) return;
+
+		// Apply scroll begin threshold
+		if (!this._scrollStarted) {
+			const dx = touch.stageX - this._touchStartX;
+			const dy = touch.stageY - this._touchStartY;
+			if (Math.sqrt(dx * dx + dy * dy) < this.scrollBeginThreshold) return;
+			this._scrollStarted = true;
+		}
 
 		const now = Date.now();
 		const dt = now - this._touchLastTime || 1;
@@ -186,9 +280,10 @@ export class ScrollView extends Sprite {
 			this._samples.shift();
 		}
 
-		const newLeft = this._applyResistance(this._scrollLeft - dx, 0, this._maxScrollLeft);
-		const newTop = this._applyResistance(this._scrollTop - dy, 0, this._maxScrollTop);
-		this._setScroll(newLeft, newTop, true);
+		const newLeft = this._applyResistance(this._scrollLeft - dx * this.scrollSpeed, 0, this._maxScrollLeft);
+		const newTop = this._applyResistance(this._scrollTop - dy * this.scrollSpeed, 0, this._maxScrollTop);
+		this._setScroll(newLeft, newTop, this.bounces);
+		this.dispatchEventWith(Event.CHANGE);
 	};
 
 	private _handleTouchEnd = (e: Event): void => {
@@ -219,6 +314,23 @@ export class ScrollView extends Sprite {
 		const dt = now - this._lastInertiaTime;
 		this._lastInertiaTime = now;
 
+		// Tween scroll takes priority over inertia
+		if (this._tweenTarget && this._tweenStart) {
+			this._tweenElapsed += dt;
+			const t = Math.min(this._tweenElapsed / this._tweenDuration, 1);
+			// quartOut easing
+			const ease = 1 - Math.pow(1 - t, 4);
+			const left = this._tweenStart.left + (this._tweenTarget.left - this._tweenStart.left) * ease;
+			const top = this._tweenStart.top + (this._tweenTarget.top - this._tweenStart.top) * ease;
+			this._setScroll(left, top);
+			this.dispatchEventWith(Event.CHANGE);
+			if (t >= 1) {
+				this._stopTweenScroll();
+				this.dispatchEventWith(Event.COMPLETE);
+			}
+			return;
+		}
+
 		const factor = Math.pow(FRICTION, dt / FRAME_MS);
 		this._velX *= factor;
 		this._velY *= factor;
@@ -226,23 +338,28 @@ export class ScrollView extends Sprite {
 		let newLeft = this._scrollLeft + this._velX * (dt / FRAME_MS);
 		let newTop = this._scrollTop + this._velY * (dt / FRAME_MS);
 
-		if (newLeft < 0) {
-			newLeft += (0 - newLeft) * SPRING;
-			this._velX *= 0.5;
-		} else if (newLeft > this._maxScrollLeft) {
-			newLeft += (this._maxScrollLeft - newLeft) * SPRING;
-			this._velX *= 0.5;
+		if (this.bounces) {
+			if (newLeft < 0) {
+				newLeft += (0 - newLeft) * SPRING;
+				this._velX *= 0.5;
+			} else if (newLeft > this._maxScrollLeft) {
+				newLeft += (this._maxScrollLeft - newLeft) * SPRING;
+				this._velX *= 0.5;
+			}
+			if (newTop < 0) {
+				newTop += (0 - newTop) * SPRING;
+				this._velY *= 0.5;
+			} else if (newTop > this._maxScrollTop) {
+				newTop += (this._maxScrollTop - newTop) * SPRING;
+				this._velY *= 0.5;
+			}
+		} else {
+			newLeft = Math.max(0, Math.min(newLeft, this._maxScrollLeft));
+			newTop = Math.max(0, Math.min(newTop, this._maxScrollTop));
 		}
 
-		if (newTop < 0) {
-			newTop += (0 - newTop) * SPRING;
-			this._velY *= 0.5;
-		} else if (newTop > this._maxScrollTop) {
-			newTop += (this._maxScrollTop - newTop) * SPRING;
-			this._velY *= 0.5;
-		}
-
-		this._setScroll(newLeft, newTop, true);
+		this._setScroll(newLeft, newTop, this.bounces);
+		this.dispatchEventWith(Event.CHANGE);
 
 		const inBoundsH = newLeft >= 0 && newLeft <= this._maxScrollLeft;
 		const inBoundsV = newTop >= 0 && newTop <= this._maxScrollTop;
@@ -262,6 +379,28 @@ export class ScrollView extends Sprite {
 		if (!this._inertiaActive) return;
 		this._inertiaActive = false;
 		this.removeEventListener(Event.ENTER_FRAME, this._handleEnterFrame);
+	}
+
+	private _tweenScroll(targetLeft: number, targetTop: number, duration: number): void {
+		this._stopInertia();
+		this._tweenStart = { left: this._scrollLeft, top: this._scrollTop };
+		this._tweenTarget = { left: targetLeft, top: targetTop };
+		this._tweenElapsed = 0;
+		this._tweenDuration = duration;
+		if (!this._inertiaActive) {
+			this._inertiaActive = true;
+			this._lastInertiaTime = Date.now();
+			this.addEventListener(Event.ENTER_FRAME, this._handleEnterFrame);
+		}
+	}
+
+	private _stopTweenScroll(): void {
+		this._tweenTarget = undefined;
+		this._tweenStart = undefined;
+		this._tweenElapsed = 0;
+		if (this._inertiaActive && Math.abs(this._velX) < STOP_THRESHOLD && Math.abs(this._velY) < STOP_THRESHOLD) {
+			this._stopInertia();
+		}
 	}
 
 	private _setScroll(left: number, top: number, allowOverscroll = false): void {

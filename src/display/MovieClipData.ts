@@ -19,6 +19,9 @@ export class MovieClipData {
 	private _frames: MovieClipFrame[] = [];
 	private _labelMap = new Map<string, number>();
 
+	/** Frame rate in fps. Used by MovieClip when no per-clip frameRate is set. */
+	public frameRate = 24;
+
 	// ── Getters / Setters ─────────────────────────────────────────────────────
 
 	public get frameCount(): number {

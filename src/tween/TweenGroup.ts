@@ -1,5 +1,5 @@
 import { Tween } from './Tween.js';
-import type { EaseFunction, TweenOptions } from './types.js';
+import type { TweenOptions } from './types.js';
 
 /**
  * Manages a named group of Tween instances.
