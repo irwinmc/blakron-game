@@ -7,7 +7,7 @@ export type { TweenOptions, EaseFunction } from './tween/types.js';
 // ── Display ──────────────────────────────────────────────────────────
 export { MovieClip } from './display/MovieClip.js';
 export { MovieClipData } from './display/MovieClipData.js';
-export { ScrollView } from './display/ScrollView.js';
+export { ScrollView, ScrollPolicy } from './display/ScrollView.js';
 export type { MovieClipFrame, MovieClipEvent } from './display/types.js';
 
 // ── Net ──────────────────────────────────────────────────────────────

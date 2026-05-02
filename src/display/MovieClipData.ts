@@ -1,37 +1,96 @@
-// TODO: implement MovieClipData
-// Holds the frame data for a MovieClip animation.
-//
-// Egret-compatible API:
-//   const data = new MovieClipData();
-//   data.addFrame(texture, duration, label?)
-//   data.frameCount        → number
-//   data.getFrame(index)   → MovieClipFrame
-//   data.getFrameByLabel(label) → number (frame index)
-//
-// Factory helpers (Egret assetsmanager integration):
-//   MovieClipData.fromSpriteSheet(sheet, config)
-//   MovieClipData.fromTextureArray(textures, fps)
-
+import type { Texture } from '@blakron/core';
 import type { MovieClipFrame } from './types.js';
 
+/**
+ * Holds the frame data for a MovieClip animation.
+ *
+ * @example
+ * ```ts
+ * const data = new MovieClipData();
+ * data.addFrame(tex1, 100, 'idle');
+ * data.addFrame(tex2, 100);
+ *
+ * const data2 = MovieClipData.fromTextureArray([tex1, tex2, tex3], 12);
+ * ```
+ */
 export class MovieClipData {
-	get frameCount(): number {
-		// TODO
-		throw new Error('MovieClipData not yet implemented');
+	// ── Instance fields ───────────────────────────────────────────────────────
+
+	private _frames: MovieClipFrame[] = [];
+	private _labelMap = new Map<string, number>();
+
+	// ── Getters / Setters ─────────────────────────────────────────────────────
+
+	public get frameCount(): number {
+		return this._frames.length;
 	}
 
-	addFrame(_texture: MovieClipFrame['texture'], _duration: number, _label?: string): void {
-		// TODO
-		throw new Error('MovieClipData#addFrame() not yet implemented');
+	public get totalDuration(): number {
+		let total = 0;
+		for (const f of this._frames) {
+			total += f.duration;
+		}
+		return total;
 	}
 
-	getFrame(_index: number): MovieClipFrame {
-		// TODO
-		throw new Error('MovieClipData#getFrame() not yet implemented');
+	// ── Public methods ────────────────────────────────────────────────────────
+
+	/**
+	 * Append a frame to the animation.
+	 * @param texture Texture to display (undefined = blank frame)
+	 * @param duration Frame duration in milliseconds
+	 * @param label Optional label for gotoAndPlay/gotoAndStop
+	 */
+	public addFrame(texture: Texture | undefined, duration: number, label?: string): void {
+		const index = this._frames.length;
+		this._frames.push({ texture, duration, label });
+		if (label) {
+			this._labelMap.set(label, index);
+		}
 	}
 
-	getFrameByLabel(_label: string): number {
-		// TODO: return -1 if not found
-		throw new Error('MovieClipData#getFrameByLabel() not yet implemented');
+	/**
+	 * Get a frame by 0-based index.
+	 */
+	public getFrame(index: number): MovieClipFrame | undefined {
+		return this._frames[index];
+	}
+
+	/**
+	 * Get the frame index for a given label.
+	 * Returns -1 if the label is not found.
+	 */
+	public getFrameByLabel(label: string): number {
+		return this._labelMap.get(label) ?? -1;
+	}
+
+	// ── Static factories ──────────────────────────────────────────────────────
+
+	/**
+	 * Create a MovieClipData from an array of textures at a fixed frame rate.
+	 */
+	public static fromTextureArray(textures: Texture[], fps = 12): MovieClipData {
+		const data = new MovieClipData();
+		const duration = 1000 / fps;
+		for (const tex of textures) {
+			data.addFrame(tex, duration);
+		}
+		return data;
+	}
+
+	/**
+	 * Create a MovieClipData from a SpriteSheet using a list of frame names.
+	 */
+	public static fromSpriteSheet(
+		sheet: { getTexture(name: string): Texture | undefined },
+		frameNames: string[],
+		fps = 12,
+	): MovieClipData {
+		const data = new MovieClipData();
+		const duration = 1000 / fps;
+		for (const name of frameNames) {
+			data.addFrame(sheet.getTexture(name), duration, name);
+		}
+		return data;
 	}
 }
