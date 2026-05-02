@@ -19,7 +19,6 @@ export class MovieClipData {
 	private _frames: MovieClipFrame[] = [];
 	private _labelMap = new Map<string, number>();
 
-	/** Frame rate in fps. Used by MovieClip when no per-clip frameRate is set. */
 	public frameRate = 24;
 
 	// ── Getters / Setters ─────────────────────────────────────────────────────
@@ -53,7 +52,7 @@ export class MovieClipData {
 	}
 
 	/**
-	 * Get a frame by 0-based index.
+	 * Get a frame by 0-based internal index.
 	 */
 	public getFrame(index: number): MovieClipFrame | undefined {
 		return this._frames[index];

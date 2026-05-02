@@ -107,10 +107,12 @@ export class Tween {
 
 	/**
 	 * Create (or reuse from pool) a Tween for the given target.
-	 * Automatically removes any existing tweens on the same target.
+	 * @param override If true, removes existing tweens on the target before creating. Default: false.
 	 */
-	public static get(target: object, options?: TweenOptions): Tween {
-		Tween.removeTweens(target);
+	public static get(target: object, options?: TweenOptions, override = false): Tween {
+		if (override) {
+			Tween.removeTweens(target);
+		}
 		const tween = _pool.pop() ?? new Tween();
 		tween._init(target, options);
 		_addActive(tween);
@@ -161,12 +163,16 @@ export class Tween {
 		_activeTweens.length = 0;
 	}
 
-	/** Pause all active tweens globally. */
+	/**
+	 * Pause all active tweens globally.
+	 */
 	public static pauseAll(): void {
 		_globalPaused = true;
 	}
 
-	/** Resume all tweens from global pause. */
+	/**
+	 * Resume all tweens from global pause.
+	 */
 	public static resumeAll(): void {
 		_globalPaused = false;
 	}
@@ -239,19 +245,22 @@ export class Tween {
 		return this;
 	}
 
-	/** Pause this tween. */
+	/**
+	 * Pause this tween.
+	 */
 	public pause(): void {
 		this._paused = true;
 	}
 
-	/** Resume this tween. */
+	/**
+	 * Resume this tween.
+	 */
 	public resume(): void {
 		this._paused = false;
 	}
 
 	// ── Internal ──────────────────────────────────────────────────────────────
 
-	/** @internal Called each frame by the global tick. */
 	public _tick(dt: number): void {
 		if (this._paused) return;
 		if (!this._ignoreGlobalPause && _globalPaused) return;

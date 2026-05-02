@@ -1,5 +1,8 @@
 import { Sprite, TouchEvent, Rectangle, Event } from '@blakron/core';
 
+/**
+ * Scroll policy constants for `ScrollView.horizontalScrollPolicy` and `verticalScrollPolicy`.
+ */
 export const ScrollPolicy = {
 	AUTO: 'auto',
 	ON: 'on',
@@ -42,13 +45,29 @@ const FRAME_MS = 16.67;
 export class ScrollView extends Sprite {
 	// ── Instance fields ───────────────────────────────────────────────────────
 
+	/**
+	 * Horizontal scroll policy. Default: `ScrollPolicy.AUTO`.
+	 */
 	public horizontalScrollPolicy: ScrollPolicy = ScrollPolicy.AUTO;
+
+	/**
+	 * Vertical scroll policy. Default: `ScrollPolicy.AUTO`.
+	 */
 	public verticalScrollPolicy: ScrollPolicy = ScrollPolicy.AUTO;
-	/** Minimum touch movement in px before scrolling begins. */
+
+	/**
+	 * Minimum touch movement in pixels before scrolling begins. Default: 10.
+	 */
 	public scrollBeginThreshold = 10;
-	/** Scroll speed multiplier. */
+
+	/**
+	 * Scroll speed multiplier applied to touch deltas. Default: 1.
+	 */
 	public scrollSpeed = 1;
-	/** Whether to allow over-scroll bounce. */
+
+	/**
+	 * Whether to allow over-scroll bounce at the content boundaries. Default: true.
+	 */
 	public bounces = true;
 
 	private _content?: Sprite;
@@ -57,7 +76,8 @@ export class ScrollView extends Sprite {
 	private _maxScrollLeft = 0;
 	private _maxScrollTop = 0;
 
-	// Touch tracking
+	// ── Touch tracking ────────────────────────────────────────────────────────
+
 	private _touchActive = false;
 	private _touchId = -1;
 	private _touchLastX = 0;
@@ -68,12 +88,15 @@ export class ScrollView extends Sprite {
 	private _scrollStarted = false;
 	private _samples: VelocitySample[] = [];
 
-	// Inertia
+	// ── Inertia ───────────────────────────────────────────────────────────────
+
 	private _velX = 0;
 	private _velY = 0;
 	private _inertiaActive = false;
 	private _lastInertiaTime = 0;
-	// Tween scroll
+
+	// ── Tween scroll ──────────────────────────────────────────────────────────
+
 	private _tweenTarget?: { left: number; top: number };
 	private _tweenStart?: { left: number; top: number };
 	private _tweenElapsed = 0;
@@ -109,10 +132,16 @@ export class ScrollView extends Sprite {
 		this._setScroll(this._scrollLeft, value);
 	}
 
+	/**
+	 * Maximum horizontal scroll distance (read-only).
+	 */
 	public get scrollRight(): number {
 		return this._maxScrollLeft;
 	}
 
+	/**
+	 * Maximum vertical scroll distance (read-only).
+	 */
 	public get scrollBottom(): number {
 		return this._maxScrollTop;
 	}
@@ -165,9 +194,9 @@ export class ScrollView extends Sprite {
 
 	/**
 	 * Set both scroll axes simultaneously.
-	 * @param top Vertical scroll position
-	 * @param left Horizontal scroll position
-	 * @param isOffset If true, values are treated as deltas relative to current position
+	 * @param top Vertical scroll position.
+	 * @param left Horizontal scroll position.
+	 * @param isOffset If true, values are treated as deltas relative to the current position.
 	 */
 	public setScrollPosition(top: number, left: number, isOffset = false): void {
 		if (isOffset) {
@@ -183,9 +212,9 @@ export class ScrollView extends Sprite {
 	}
 
 	/**
-	 * Scroll to the given vertical position, optionally with a tween duration.
-	 * @param scrollTop Target vertical scroll position
-	 * @param duration Tween duration in ms (0 = instant)
+	 * Scroll to the given vertical position.
+	 * @param scrollTop Target vertical scroll position.
+	 * @param duration Tween duration in ms. 0 = instant.
 	 */
 	public setScrollTop(scrollTop: number, duration = 0): void {
 		const target = Math.max(0, Math.min(scrollTop, this._maxScrollTop));
@@ -197,9 +226,9 @@ export class ScrollView extends Sprite {
 	}
 
 	/**
-	 * Scroll to the given horizontal position, optionally with a tween duration.
-	 * @param scrollLeft Target horizontal scroll position
-	 * @param duration Tween duration in ms (0 = instant)
+	 * Scroll to the given horizontal position.
+	 * @param scrollLeft Target horizontal scroll position.
+	 * @param duration Tween duration in ms. 0 = instant.
 	 */
 	public setScrollLeft(scrollLeft: number, duration = 0): void {
 		const target = Math.max(0, Math.min(scrollLeft, this._maxScrollLeft));
@@ -210,12 +239,16 @@ export class ScrollView extends Sprite {
 		this._tweenScroll(target, this._scrollTop, duration);
 	}
 
-	/** Maximum horizontal scroll distance. */
+	/**
+	 * Maximum horizontal scroll distance.
+	 */
 	public getMaxScrollLeft(): number {
 		return this._maxScrollLeft;
 	}
 
-	/** Maximum vertical scroll distance. */
+	/**
+	 * Maximum vertical scroll distance.
+	 */
 	public getMaxScrollTop(): number {
 		return this._maxScrollTop;
 	}
@@ -258,7 +291,6 @@ export class ScrollView extends Sprite {
 		const touch = e as TouchEvent;
 		if (!this._touchActive || touch.touchPointID !== this._touchId) return;
 
-		// Apply scroll begin threshold
 		if (!this._scrollStarted) {
 			const dx = touch.stageX - this._touchStartX;
 			const dy = touch.stageY - this._touchStartY;
@@ -314,11 +346,9 @@ export class ScrollView extends Sprite {
 		const dt = now - this._lastInertiaTime;
 		this._lastInertiaTime = now;
 
-		// Tween scroll takes priority over inertia
 		if (this._tweenTarget && this._tweenStart) {
 			this._tweenElapsed += dt;
 			const t = Math.min(this._tweenElapsed / this._tweenDuration, 1);
-			// quartOut easing
 			const ease = 1 - Math.pow(1 - t, 4);
 			const left = this._tweenStart.left + (this._tweenTarget.left - this._tweenStart.left) * ease;
 			const top = this._tweenStart.top + (this._tweenTarget.top - this._tweenStart.top) * ease;

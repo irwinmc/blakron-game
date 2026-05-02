@@ -4,6 +4,8 @@ import type { MovieClipData } from './MovieClipData.js';
 /**
  * Sequence-frame animation display object, Egret-compatible.
  *
+ * Frame numbers are 1-based, matching Egret's original API.
+ *
  * @example
  * ```ts
  * const data = MovieClipData.fromTextureArray([tex1, tex2, tex3], 12);
@@ -19,14 +21,12 @@ export class MovieClip extends Bitmap {
 	// ── Instance fields ───────────────────────────────────────────────────────
 
 	private _data?: MovieClipData;
-	private _currentFrame = 0;
+	private _currentFrameIndex = 0;
 	private _isPlaying = false;
 	private _elapsed = 0;
 	private _lastTimeStamp = 0;
-	/** -1 = infinite loop, 0 = use current setting, >=1 = play N times */
 	private _playTimes = 1;
 	private _playedTimes = 0;
-	/** Per-clip frame rate override. NaN = use MovieClipData.frameRate */
 	private _frameRate = NaN;
 
 	// ── Constructor ───────────────────────────────────────────────────────────
@@ -46,15 +46,21 @@ export class MovieClip extends Bitmap {
 
 	public set movieClipData(value: MovieClipData | undefined) {
 		this._data = value;
-		this._currentFrame = 0;
+		this._currentFrameIndex = 0;
 		this._elapsed = 0;
 		this._applyFrame(0);
 	}
 
+	/**
+	 * Current frame number, 1-based (Egret-compatible).
+	 */
 	public get currentFrame(): number {
-		return this._currentFrame;
+		return this._currentFrameIndex + 1;
 	}
 
+	/**
+	 * Total number of frames.
+	 */
 	public get totalFrames(): number {
 		return this._data?.frameCount ?? 0;
 	}
@@ -67,7 +73,7 @@ export class MovieClip extends Bitmap {
 	 * Label of the current frame, or undefined if the current frame has no label.
 	 */
 	public get currentFrameLabel(): string | undefined {
-		return this._data?.getFrame(this._currentFrame)?.label;
+		return this._data?.getFrame(this._currentFrameIndex)?.label;
 	}
 
 	/**
@@ -76,7 +82,7 @@ export class MovieClip extends Bitmap {
 	 */
 	public get currentLabel(): string | undefined {
 		if (!this._data) return undefined;
-		for (let i = this._currentFrame; i >= 0; i--) {
+		for (let i = this._currentFrameIndex; i >= 0; i--) {
 			const label = this._data.getFrame(i)?.label;
 			if (label) return label;
 		}
@@ -118,39 +124,45 @@ export class MovieClip extends Bitmap {
 		ticker.startTick(this._handleTick, this);
 	}
 
-	/** Stop playback and stay on the current frame. */
+	/**
+	 * Stop playback and stay on the current frame.
+	 */
 	public stop(): void {
 		if (!this._isPlaying) return;
 		this._isPlaying = false;
 		ticker.stopTick(this._handleTick, this);
 	}
 
-	/** Move to the previous frame and stop. */
+	/**
+	 * Move to the previous frame and stop.
+	 */
 	public prevFrame(): void {
-		this.gotoAndStop(Math.max(0, this._currentFrame - 1));
+		this.gotoAndStop(this.currentFrame - 1);
 	}
 
-	/** Move to the next frame and stop. */
+	/**
+	 * Move to the next frame and stop.
+	 */
 	public nextFrame(): void {
-		this.gotoAndStop(Math.min(this.totalFrames - 1, this._currentFrame + 1));
+		this.gotoAndStop(this.currentFrame + 1);
 	}
 
 	/**
 	 * Jump to a frame and start playing.
-	 * @param frameIndexOrLabel 0-based frame index or a frame label string
-	 * @param playTimes Number of times to play (-1 = loop, 0 = keep current, >=1 = N times)
+	 * @param frame 1-based frame number or a frame label string.
+	 * @param playTimes Number of times to play (-1 = loop, 0 = keep current, >=1 = N times).
 	 */
-	public gotoAndPlay(frameIndexOrLabel: number | string, playTimes = 0): void {
-		this._gotoFrame(frameIndexOrLabel);
+	public gotoAndPlay(frame: number | string, playTimes = 0): void {
+		this._gotoFrame(frame);
 		this.play(playTimes);
 	}
 
 	/**
 	 * Jump to a frame and stop.
-	 * @param frameIndexOrLabel 0-based frame index or a frame label string
+	 * @param frame 1-based frame number or a frame label string.
 	 */
-	public gotoAndStop(frameIndexOrLabel: number | string): void {
-		this._gotoFrame(frameIndexOrLabel);
+	public gotoAndStop(frame: number | string): void {
+		this._gotoFrame(frame);
 		this.stop();
 	}
 
@@ -177,7 +189,6 @@ export class MovieClip extends Bitmap {
 	private _advance(dt: number): void {
 		if (!this._data || this._data.frameCount === 0) return;
 
-		// Use per-clip frameRate if set, otherwise fall back to MovieClipData rate
 		const fps = !isNaN(this._frameRate) ? this._frameRate : (this._data.frameRate ?? 24);
 		const frameDuration = 1000 / fps;
 
@@ -185,45 +196,45 @@ export class MovieClip extends Bitmap {
 
 		while (this._elapsed >= frameDuration) {
 			this._elapsed -= frameDuration;
-			const nextFrame = this._currentFrame + 1;
+			const nextIndex = this._currentFrameIndex + 1;
 
-			if (nextFrame >= this._data.frameCount) {
+			if (nextIndex >= this._data.frameCount) {
 				this._playedTimes++;
 				const isInfinite = this._playTimes === -1;
 				const hasMorePlays = isInfinite || this._playedTimes < this._playTimes;
 
 				if (hasMorePlays) {
 					this.dispatchEventWith(Event.LOOP_COMPLETE);
-					this._currentFrame = 0;
+					this._currentFrameIndex = 0;
 				} else {
-					this._currentFrame = this._data.frameCount - 1;
-					this._applyFrame(this._currentFrame);
+					this._currentFrameIndex = this._data.frameCount - 1;
+					this._applyFrame(this._currentFrameIndex);
 					this.dispatchEventWith(Event.COMPLETE);
 					this.stop();
 					return;
 				}
 			} else {
-				this._currentFrame = nextFrame;
+				this._currentFrameIndex = nextIndex;
 			}
 
-			this._applyFrame(this._currentFrame);
+			this._applyFrame(this._currentFrameIndex);
 		}
 	}
 
-	private _gotoFrame(frameIndexOrLabel: number | string): void {
+	private _gotoFrame(frame: number | string): void {
 		if (!this._data) return;
 
 		let index: number;
-		if (typeof frameIndexOrLabel === 'string') {
-			index = this._data.getFrameByLabel(frameIndexOrLabel);
+		if (typeof frame === 'string') {
+			index = this._data.getFrameByLabel(frame);
 			if (index === -1) return;
 		} else {
-			index = frameIndexOrLabel;
+			index = frame - 1;
 		}
 
-		this._currentFrame = Math.max(0, Math.min(index, this._data.frameCount - 1));
+		this._currentFrameIndex = Math.max(0, Math.min(index, this._data.frameCount - 1));
 		this._elapsed = 0;
-		this._applyFrame(this._currentFrame);
+		this._applyFrame(this._currentFrameIndex);
 	}
 
 	private _applyFrame(index: number): void {

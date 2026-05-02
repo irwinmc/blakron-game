@@ -37,6 +37,18 @@ export class URLLoader extends EventDispatcher {
 	private _imageLoader?: ImageLoader;
 	private _sound?: Sound;
 
+	// ── Constructor ───────────────────────────────────────────────────────────
+
+	/**
+	 * @param request Optional URLRequest to load immediately on construction.
+	 */
+	public constructor(request?: URLRequest) {
+		super();
+		if (request) {
+			this.load(request);
+		}
+	}
+
 	// ── Public methods ────────────────────────────────────────────────────────
 
 	public load(request: URLRequest): void {
