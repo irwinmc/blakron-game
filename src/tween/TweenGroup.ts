@@ -29,6 +29,9 @@ export class TweenGroup {
 
 	// ── Getters / Setters ─────────────────────────────────────────────────────
 
+	/**
+	 * Number of tweens currently tracked by this group.
+	 */
 	public get size(): number {
 		return this._tweens.length;
 	}

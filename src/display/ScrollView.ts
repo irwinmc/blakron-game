@@ -112,10 +112,16 @@ export class ScrollView extends Sprite {
 
 	// ── Getters / Setters ─────────────────────────────────────────────────────
 
+	/**
+	 * The current scrollable content object.
+	 */
 	public get content(): Sprite | undefined {
 		return this._content;
 	}
 
+	/**
+	 * Horizontal scroll position in pixels.
+	 */
 	public get scrollLeft(): number {
 		return this._scrollLeft;
 	}
@@ -124,6 +130,9 @@ export class ScrollView extends Sprite {
 		this._setScroll(value, this._scrollTop);
 	}
 
+	/**
+	 * Vertical scroll position in pixels.
+	 */
 	public get scrollTop(): number {
 		return this._scrollTop;
 	}

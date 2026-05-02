@@ -19,14 +19,23 @@ export class MovieClipData {
 	private _frames: MovieClipFrame[] = [];
 	private _labelMap = new Map<string, number>();
 
+	/**
+	 * Frame rate in fps used when no per-clip override is set.
+	 */
 	public frameRate = 24;
 
 	// ── Getters / Setters ─────────────────────────────────────────────────────
 
+	/**
+	 * Total number of frames.
+	 */
 	public get frameCount(): number {
 		return this._frames.length;
 	}
 
+	/**
+	 * Total animation duration in milliseconds.
+	 */
 	public get totalDuration(): number {
 		let total = 0;
 		for (const f of this._frames) {

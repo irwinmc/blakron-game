@@ -15,9 +15,24 @@ import { URLRequestMethod } from './URLRequestMethod.js';
 export class URLRequest {
 	// ── Instance fields ───────────────────────────────────────────────────────
 
+	/**
+	 * The request URL.
+	 */
 	public url: string;
+
+	/**
+	 * HTTP method. Default: `URLRequestMethod.GET`.
+	 */
 	public method: string = URLRequestMethod.GET;
+
+	/**
+	 * Request body data for POST requests.
+	 */
 	public data: string | ArrayBuffer | undefined;
+
+	/**
+	 * Additional HTTP request headers.
+	 */
 	public requestHeaders: URLRequestHeader[] = [];
 
 	// ── Constructor ───────────────────────────────────────────────────────────

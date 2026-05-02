@@ -44,6 +44,9 @@ export class MovieClip extends Bitmap {
 		return this._data;
 	}
 
+	/**
+	 * Set the frame data source. Resets playback to frame 1.
+	 */
 	public set movieClipData(value: MovieClipData | undefined) {
 		this._data = value;
 		this._currentFrameIndex = 0;
@@ -65,6 +68,9 @@ export class MovieClip extends Bitmap {
 		return this._data?.frameCount ?? 0;
 	}
 
+	/**
+	 * Whether the animation is currently playing.
+	 */
 	public get isPlaying(): boolean {
 		return this._isPlaying;
 	}

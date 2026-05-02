@@ -51,6 +51,9 @@ export class URLLoader extends EventDispatcher {
 
 	// ── Public methods ────────────────────────────────────────────────────────
 
+	/**
+	 * Start loading from the specified URL.
+	 */
 	public load(request: URLRequest): void {
 		this.close();
 
@@ -67,6 +70,9 @@ export class URLLoader extends EventDispatcher {
 		}
 	}
 
+	/**
+	 * Abort any in-flight request and release internal loader references.
+	 */
 	public close(): void {
 		if (this._xhr) {
 			this._xhr.abort();
