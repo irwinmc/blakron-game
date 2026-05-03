@@ -50,6 +50,23 @@ let _tickerRegistered = false;
 let _globalPaused = false;
 let _lastTimeStamp = 0;
 
+/** WeakMap tracking active tween count per target — avoids polluting target objects. */
+const _tweenCounts = new WeakMap<object, number>();
+
+function _getTweenCount(target: object): number {
+	return _tweenCounts.get(target) ?? 0;
+}
+
+function _incTweenCount(target: object): void {
+	_tweenCounts.set(target, (_tweenCounts.get(target) ?? 0) + 1);
+}
+
+function _decTweenCount(target: object): void {
+	const n = (_tweenCounts.get(target) ?? 1) - 1;
+	if (n <= 0) _tweenCounts.delete(target);
+	else _tweenCounts.set(target, n);
+}
+
 function _registerTicker(): void {
 	if (_tickerRegistered) return;
 	_tickerRegistered = true;
@@ -130,9 +147,10 @@ export class Tween {
 			// Don't add to active list — tween starts paused
 		} else {
 			_addActive(tween);
-			// Track tween count on target (Egret compatibility)
+			// Track tween count via WeakMap (Egret compatibility: also set tween_count on target)
+			_incTweenCount(target);
 			const t = target as Record<string, unknown>;
-			t.tween_count = typeof t.tween_count === 'number' ? (t.tween_count as number) + 1 : 1;
+			t.tween_count = _getTweenCount(target);
 		}
 
 		// Jump to initial position if specified
@@ -148,13 +166,14 @@ export class Tween {
 	 */
 	public static removeTweens(target: object): void {
 		const t = target as Record<string, unknown>;
-		if (!t.tween_count) return;
+		if (!t.tween_count && _getTweenCount(target) === 0) return;
 		for (let i = _activeTweens.length - 1; i >= 0; i--) {
 			if (_activeTweens[i]._target === target) {
 				_activeTweens[i]._recycle();
 				_activeTweens.splice(i, 1);
 			}
 		}
+		_tweenCounts.delete(target);
 		t.tween_count = 0;
 	}
 
@@ -162,8 +181,7 @@ export class Tween {
 	 * Pause all tweens targeting the given object.
 	 */
 	public static pauseTweens(target: object): void {
-		const t = target as Record<string, unknown>;
-		if (!t.tween_count) return;
+		if (_getTweenCount(target) === 0) return;
 		for (const tween of _activeTweens) {
 			if (tween._target === target) tween.setPaused(true);
 		}
@@ -173,8 +191,7 @@ export class Tween {
 	 * Resume all tweens targeting the given object.
 	 */
 	public static resumeTweens(target: object): void {
-		const t = target as Record<string, unknown>;
-		if (!t.tween_count) return;
+		if (_getTweenCount(target) === 0) return;
 		for (const tween of _activeTweens) {
 			if (tween._target === target) tween.setPaused(false);
 		}
@@ -185,8 +202,10 @@ export class Tween {
 	 */
 	public static removeAllTweens(): void {
 		for (const tween of _activeTweens) {
-			const t = tween._target as Record<string, unknown> | undefined;
-			if (t) t.tween_count = 0;
+			if (tween._target) {
+				_tweenCounts.delete(tween._target);
+				(tween._target as Record<string, unknown>).tween_count = 0;
+			}
 			tween._recycle();
 		}
 		_activeTweens.length = 0;
@@ -368,10 +387,10 @@ export class Tween {
 					this._onLoopComplete.call(this._onLoopCompleteObj ?? this._target, this);
 				}
 			} else {
-				// Decrement tween_count on target
-				const t = this._target as Record<string, unknown>;
-				if (typeof t.tween_count === 'number') {
-					t.tween_count = Math.max(0, (t.tween_count as number) - 1);
+				// Decrement tween count
+				if (this._target) {
+					_decTweenCount(this._target);
+					(this._target as Record<string, unknown>).tween_count = _getTweenCount(this._target);
 				}
 				_removeActive(this);
 				_pool.push(this);
