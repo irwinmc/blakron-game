@@ -7,6 +7,8 @@ export interface MovieClipFrame {
 	texture?: Texture;
 	duration: number;
 	label?: string;
+	/** Custom event name to dispatch when this frame is reached. */
+	event?: string;
 }
 
 /**

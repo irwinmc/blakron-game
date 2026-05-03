@@ -113,11 +113,13 @@ export class MovieClip extends Bitmap {
 
 	/**
 	 * Start or resume playback.
-	 * @param playTimes Number of times to play. -1 = loop forever, 0 = keep current setting, >=1 = play N times.
+	 * @param playTimes Number of times to play. -1 = loop forever, 0 = don't change current setting, >=1 = play N times.
 	 */
 	public play(playTimes = 0): void {
 		this._lastTimeStamp = 0;
+		this._elapsed = 0;
 		if (playTimes !== 0) {
+			// 0 means "don't change" — Egret-compatible
 			this._playTimes = playTimes < 0 ? -1 : Math.floor(playTimes);
 		}
 		if (this._playTimes === 0) {
@@ -245,5 +247,10 @@ export class MovieClip extends Bitmap {
 
 	private _applyFrame(index: number): void {
 		this.texture = this._data?.getFrame(index)?.texture;
+		// Dispatch frame event if defined for this frame (Egret frameEvents compatibility)
+		const frameEvent = this._data?.getFrame(index)?.event;
+		if (frameEvent) {
+			this.dispatchEventWith(frameEvent);
+		}
 	}
 }

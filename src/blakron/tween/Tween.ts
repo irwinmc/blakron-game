@@ -107,15 +107,39 @@ export class Tween {
 
 	/**
 	 * Create (or reuse from pool) a Tween for the given target.
+	 * @param props  Options: loop, ignoreGlobalPause, onChange, onChangeObj, paused, position
 	 * @param override If true, removes existing tweens on the target before creating. Default: false.
 	 */
-	public static get(target: object, options?: TweenOptions, override = false): Tween {
+	public static get(
+		target: object,
+		props?: TweenOptions & {
+			onChange?: (tween: Tween) => void;
+			onChangeObj?: object;
+			paused?: boolean;
+			position?: number;
+		},
+		override = false,
+	): Tween {
 		if (override) {
 			Tween.removeTweens(target);
 		}
 		const tween = _pool.pop() ?? new Tween();
-		tween._init(target, options);
-		_addActive(tween);
+		tween._init(target, props);
+
+		if (props?.paused) {
+			// Don't add to active list — tween starts paused
+		} else {
+			_addActive(tween);
+			// Track tween count on target (Egret compatibility)
+			const t = target as Record<string, unknown>;
+			t.tween_count = typeof t.tween_count === 'number' ? (t.tween_count as number) + 1 : 1;
+		}
+
+		// Jump to initial position if specified
+		if (props?.position != null) {
+			tween._seekTo(props.position);
+		}
+
 		return tween;
 	}
 
@@ -123,22 +147,25 @@ export class Tween {
 	 * Remove and recycle all tweens targeting the given object.
 	 */
 	public static removeTweens(target: object): void {
+		const t = target as Record<string, unknown>;
+		if (!t.tween_count) return;
 		for (let i = _activeTweens.length - 1; i >= 0; i--) {
 			if (_activeTweens[i]._target === target) {
 				_activeTweens[i]._recycle();
 				_activeTweens.splice(i, 1);
 			}
 		}
+		t.tween_count = 0;
 	}
 
 	/**
 	 * Pause all tweens targeting the given object.
 	 */
 	public static pauseTweens(target: object): void {
+		const t = target as Record<string, unknown>;
+		if (!t.tween_count) return;
 		for (const tween of _activeTweens) {
-			if (tween._target === target) {
-				tween.pause();
-			}
+			if (tween._target === target) tween.setPaused(true);
 		}
 	}
 
@@ -146,10 +173,10 @@ export class Tween {
 	 * Resume all tweens targeting the given object.
 	 */
 	public static resumeTweens(target: object): void {
+		const t = target as Record<string, unknown>;
+		if (!t.tween_count) return;
 		for (const tween of _activeTweens) {
-			if (tween._target === target) {
-				tween.resume();
-			}
+			if (tween._target === target) tween.setPaused(false);
 		}
 	}
 
@@ -158,6 +185,8 @@ export class Tween {
 	 */
 	public static removeAllTweens(): void {
 		for (const tween of _activeTweens) {
+			const t = tween._target as Record<string, unknown> | undefined;
+			if (t) t.tween_count = 0;
 			tween._recycle();
 		}
 		_activeTweens.length = 0;
@@ -179,7 +208,7 @@ export class Tween {
 
 	// ── Instance fields ───────────────────────────────────────────────────────
 
-	private _target?: object;
+	_target?: object;
 	private _steps: TweenStep[] = [];
 	private _stepIndex = 0;
 	private _stepElapsed = 0;
@@ -187,6 +216,10 @@ export class Tween {
 	private _loop = false;
 	private _ignoreGlobalPause = false;
 	private _defaultEase: EaseFunction = Ease.linear;
+	private _onChange?: (tween: Tween) => void;
+	private _onChangeObj?: object;
+	private _onLoopComplete?: (tween: Tween) => void;
+	private _onLoopCompleteObj?: object;
 
 	// ── Instance API ──────────────────────────────────────────────────────────
 
@@ -246,17 +279,39 @@ export class Tween {
 	}
 
 	/**
-	 * Pause this tween.
+	 * Set paused state. Egret-compatible: `setPaused(true)` pauses, `setPaused(false)` resumes.
 	 */
-	public pause(): void {
-		this._paused = true;
+	public setPaused(value: boolean): this {
+		if (this._paused === value) return this;
+		this._paused = value;
+		if (value) {
+			_removeActive(this);
+		} else {
+			_addActive(this);
+		}
+		return this;
 	}
 
 	/**
-	 * Resume this tween.
+	 * Pause this tween immediately.
+	 */
+	public pause(): void {
+		this.setPaused(true);
+	}
+
+	/**
+	 * Resume this tween immediately.
 	 */
 	public resume(): void {
-		this._paused = false;
+		this.setPaused(false);
+	}
+
+	/**
+	 * Jump to an absolute time position (ms) in the tween sequence.
+	 * Egret-compatible: `setPosition(value, actionsMode)` — actionsMode is ignored.
+	 */
+	public setPosition(value: number, _actionsMode = 1): void {
+		this._seekTo(Math.max(0, value));
 	}
 
 	// ── Internal ──────────────────────────────────────────────────────────────
@@ -295,6 +350,11 @@ export class Tween {
 			}
 		}
 
+		// Fire onChange callback
+		if (this._onChange) {
+			this._onChange.call(this._onChangeObj ?? this._target, this);
+		}
+
 		if (this._stepIndex >= this._steps.length) {
 			if (this._loop) {
 				this._stepIndex = 0;
@@ -303,7 +363,16 @@ export class Tween {
 					if (step.type === 'to') step.startValues = undefined;
 					if (step.type === 'from') step.endValues = undefined;
 				}
+				// Fire onLoopComplete callback (Egret LOOP_COMPLETE equivalent)
+				if (this._onLoopComplete) {
+					this._onLoopComplete.call(this._onLoopCompleteObj ?? this._target, this);
+				}
 			} else {
+				// Decrement tween_count on target
+				const t = this._target as Record<string, unknown>;
+				if (typeof t.tween_count === 'number') {
+					t.tween_count = Math.max(0, (t.tween_count as number) - 1);
+				}
 				_removeActive(this);
 				_pool.push(this);
 			}
@@ -356,7 +425,42 @@ export class Tween {
 		}
 	}
 
-	private _init(target: object, options?: TweenOptions): void {
+	/** Seek to an absolute time position (ms) across all steps. */
+	private _seekTo(positionMs: number): void {
+		let remaining = positionMs;
+		this._stepIndex = 0;
+		this._stepElapsed = 0;
+		for (let i = 0; i < this._steps.length; i++) {
+			const step = this._steps[i];
+			if (step.duration === 0) continue;
+			if (remaining <= step.duration) {
+				this._stepIndex = i;
+				this._stepElapsed = remaining;
+				this._initStep(step);
+				this._applyStep(step, remaining / step.duration);
+				return;
+			}
+			remaining -= step.duration;
+		}
+		this._stepIndex = this._steps.length;
+	}
+
+	_recycle(): void {
+		this._target = undefined;
+		this._steps = [];
+		this._stepIndex = 0;
+		this._stepElapsed = 0;
+		this._paused = false;
+		this._onChange = undefined;
+		this._onChangeObj = undefined;
+		this._onLoopComplete = undefined;
+		this._onLoopCompleteObj = undefined;
+	}
+
+	private _init(
+		target: object,
+		options?: TweenOptions & { onChange?: (tween: Tween) => void; onChangeObj?: object },
+	): void {
 		this._target = target;
 		this._steps = [];
 		this._stepIndex = 0;
@@ -365,13 +469,9 @@ export class Tween {
 		this._loop = options?.loop ?? false;
 		this._ignoreGlobalPause = options?.ignoreGlobalPause ?? false;
 		this._defaultEase = options?.ease ?? Ease.linear;
-	}
-
-	private _recycle(): void {
-		this._target = undefined;
-		this._steps = [];
-		this._stepIndex = 0;
-		this._stepElapsed = 0;
-		this._paused = false;
+		this._onChange = options?.onChange;
+		this._onChangeObj = options?.onChangeObj;
+		this._onLoopComplete = options?.onLoopComplete;
+		this._onLoopCompleteObj = options?.onLoopCompleteObj;
 	}
 }

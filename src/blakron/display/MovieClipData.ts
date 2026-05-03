@@ -61,6 +61,16 @@ export class MovieClipData {
 	}
 
 	/**
+	 * Set a custom event name to dispatch when a specific frame is reached.
+	 * @param frameIndex 0-based frame index
+	 * @param eventName Event name to dispatch (e.g. 'attack', 'footstep')
+	 */
+	public setFrameEvent(frameIndex: number, eventName: string): void {
+		const frame = this._frames[frameIndex];
+		if (frame) frame.event = eventName;
+	}
+
+	/**
 	 * Get a frame by 0-based internal index.
 	 */
 	public getFrame(index: number): MovieClipFrame | undefined {

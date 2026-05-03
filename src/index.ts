@@ -16,3 +16,4 @@ export { URLRequest } from './blakron/net/URLRequest.js';
 export { URLLoaderDataFormat } from './blakron/net/URLLoaderDataFormat.js';
 export { URLRequestHeader } from './blakron/net/URLRequestHeader.js';
 export { URLRequestMethod } from './blakron/net/URLRequestMethod.js';
+export { URLVariables } from './blakron/net/URLVariables.js';
