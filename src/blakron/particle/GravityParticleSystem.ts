@@ -158,7 +158,6 @@ export class GravityParticleSystem extends ParticleSystem {
 
 		const restTime = locParticle.totalTime - locParticle.currentTime;
 		const actualDt = restTime > dtSec ? dtSec : restTime;
-		locParticle.currentTime += actualDt;
 
 		const distanceX = locParticle.x - locParticle.startX;
 		const distanceY = locParticle.y - locParticle.startY;

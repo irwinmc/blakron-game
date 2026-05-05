@@ -94,10 +94,10 @@ class Region {
 			else if (y3 > maxY) maxY = y3;
 		}
 
-		this.minX = minX;
-		this.minY = minY;
-		this.maxX = maxX;
-		this.maxY = maxY;
+		this.minX = minX - 1;
+		this.minY = minY - 1;
+		this.maxX = maxX + 1;
+		this.maxY = maxY + 1;
 	}
 }
 

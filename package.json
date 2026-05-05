@@ -1,6 +1,6 @@
 {
 	"name": "@blakron/game",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"description": "Game extensions for the Blakron engine — Tween, Ease, MovieClip, ScrollView, URLLoader",
 	"author": "",
 	"license": "MIT",
