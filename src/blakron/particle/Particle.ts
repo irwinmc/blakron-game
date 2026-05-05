@@ -1,7 +1,6 @@
 import { Matrix, NumberUtils } from '@blakron/core';
 
 export class Particle {
-
 	// ── Instance fields ───────────────────────────────────────────────────────
 
 	public x = 0;
@@ -11,11 +10,11 @@ export class Particle {
 	public alpha = 1;
 	public currentTime = 0;
 	public totalTime = 1000;
-	public blendMode: number = 0;
+	public blendMode = 0;
 
 	// ── Private fields ────────────────────────────────────────────────────────
 
-	private matrix: Matrix = new Matrix();
+	private _matrix: Matrix = new Matrix();
 
 	// ── Public methods ────────────────────────────────────────────────────────
 
@@ -29,8 +28,8 @@ export class Particle {
 		this.totalTime = 1000;
 	}
 
-	public $getMatrix(regX: number, regY: number): Matrix {
-		const matrix = this.matrix;
+	public getMatrix(regX: number, regY: number): Matrix {
+		const matrix = this._matrix;
 		matrix.identity();
 
 		let cos: number;

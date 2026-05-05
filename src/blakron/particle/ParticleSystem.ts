@@ -6,7 +6,6 @@ import {
 	Rectangle,
 	Texture,
 	ticker,
-	getTimer,
 	type RenderObjectType,
 } from '@blakron/core';
 import { Particle } from './Particle.js';
@@ -224,7 +223,7 @@ export class ParticleSystem extends DisplayObject {
 		if (this.emissionRate === 0) return;
 
 		this.emissionTime = duration;
-		this._timeStamp = getTimer();
+		this._timeStamp = Date.now();
 		ticker.startTick(this._update, this);
 	}
 

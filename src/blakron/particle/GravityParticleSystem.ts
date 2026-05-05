@@ -3,6 +3,40 @@ import { GravityParticle } from './GravityParticle.js';
 import { Particle } from './Particle.js';
 import { ParticleSystem } from './ParticleSystem.js';
 
+// ── Particle config (JSON format from Particle Designer) ────────────────────────
+
+export interface ParticleConfig {
+	emitter: { x?: number; y?: number };
+	emitterVariance: { x?: number; y?: number };
+	gravity: { x?: number; y?: number };
+	emitterRect?: { x?: number; y?: number; width?: number; height?: number };
+	useEmitterRect?: boolean;
+	maxParticles?: number;
+	speed?: number;
+	speedVariance?: number;
+	lifespan?: number;
+	lifespanVariance?: number;
+	emitAngle?: number;
+	emitAngleVariance?: number;
+	startSize?: number;
+	startSizeVariance?: number;
+	endSize?: number;
+	endSizeVariance?: number;
+	startRotation?: number;
+	startRotationVariance?: number;
+	endRotation?: number;
+	endRotationVariance?: number;
+	radialAcceleration?: number;
+	radialAccelerationVariance?: number;
+	tangentialAcceleration?: number;
+	tangentialAccelerationVariance?: number;
+	startAlpha?: number;
+	startAlphaVariance?: number;
+	endAlpha?: number;
+	endAlphaVariance?: number;
+	blendMode?: number;
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 function getValue(value: unknown): number {
@@ -15,49 +49,52 @@ function getValue(value: unknown): number {
 export class GravityParticleSystem extends ParticleSystem {
 	// ── Private fields ────────────────────────────────────────────────────────
 
-	private emitterXVariance!: number;
-	private emitterYVariance!: number;
+	private _config: ParticleConfig;
 
-	private lifespan!: number;
-	private lifespanVariance!: number;
+	private _emitterXVariance = 0;
+	private _emitterYVariance = 0;
 
-	private startSize!: number;
-	private startSizeVariance!: number;
-	private endSize!: number;
-	private endSizeVariance!: number;
+	private _lifespan = 0;
+	private _lifespanVariance = 0;
 
-	private emitAngle!: number;
-	private emitAngleVariance!: number;
+	private _startSize = 0;
+	private _startSizeVariance = 0;
+	private _endSize = 0;
+	private _endSizeVariance = 0;
 
-	private startRotation!: number;
-	private startRotationVariance!: number;
-	private endRotation!: number;
-	private endRotationVariance!: number;
+	private _emitAngle = 0;
+	private _emitAngleVariance = 0;
 
-	private speed!: number;
-	private speedVariance!: number;
+	private _startRotation = 0;
+	private _startRotationVariance = 0;
+	private _endRotation = 0;
+	private _endRotationVariance = 0;
 
-	private gravityX!: number;
-	private gravityY!: number;
+	private _speed = 0;
+	private _speedVariance = 0;
 
-	private radialAcceleration!: number;
-	private radialAccelerationVariance!: number;
-	private tangentialAcceleration!: number;
-	private tangentialAccelerationVariance!: number;
+	private _gravityX = 0;
+	private _gravityY = 0;
 
-	private startAlpha!: number;
-	private startAlphaVariance!: number;
-	private endAlpha!: number;
-	private endAlphaVariance!: number;
+	private _radialAcceleration = 0;
+	private _radialAccelerationVariance = 0;
+	private _tangentialAcceleration = 0;
+	private _tangentialAccelerationVariance = 0;
 
-	private particleBlendMode!: number;
+	private _startAlpha = 0;
+	private _startAlphaVariance = 0;
+	private _endAlpha = 0;
+	private _endAlphaVariance = 0;
+
+	private _particleBlendMode = 0;
 
 	// ── Constructor ───────────────────────────────────────────────────────────
 
-	public constructor(texture: Texture, config: any) {
+	public constructor(texture: Texture, config: ParticleConfig) {
 		super(texture, 200);
-		this.parseConfig(config);
-		this.emissionRate = this.lifespan / this.maxParticles;
+		this._config = config;
+		this.parseConfig();
+		this.emissionRate = this._lifespan / this.maxParticles;
 		this.particleClass = GravityParticle;
 	}
 
@@ -66,53 +103,53 @@ export class GravityParticleSystem extends ParticleSystem {
 	public override initParticle(particle: Particle): void {
 		const locParticle = particle as GravityParticle;
 
-		const lifespan = GravityParticleSystem.getValue(this.lifespan, this.lifespanVariance);
+		const lifespan = GravityParticleSystem.getValue(this._lifespan, this._lifespanVariance);
 
 		locParticle.currentTime = 0;
 		locParticle.totalTime = lifespan > 0 ? lifespan : 0;
 
 		if (lifespan <= 0) return;
 
-		locParticle.x = GravityParticleSystem.getValue(this.emitterX, this.emitterXVariance);
-		locParticle.y = GravityParticleSystem.getValue(this.emitterY, this.emitterYVariance);
-		locParticle.startX = this.emitterX;
-		locParticle.startY = this.emitterY;
+		locParticle.x = GravityParticleSystem.getValue(this._emitterX, this._emitterXVariance);
+		locParticle.y = GravityParticleSystem.getValue(this._emitterY, this._emitterYVariance);
+		locParticle.startX = this._emitterX;
+		locParticle.startY = this._emitterY;
 
-		const angle = GravityParticleSystem.getValue(this.emitAngle, this.emitAngleVariance);
-		const speed = GravityParticleSystem.getValue(this.speed, this.speedVariance);
-		locParticle.velocityX = speed * NumberUtils.cos(angle);
-		locParticle.velocityY = speed * NumberUtils.sin(angle);
+		const angle = GravityParticleSystem.getValue(this._emitAngle, this._emitAngleVariance);
+		const spd = GravityParticleSystem.getValue(this._speed, this._speedVariance);
+		locParticle.velocityX = spd * NumberUtils.cos(angle);
+		locParticle.velocityY = spd * NumberUtils.sin(angle);
 
 		locParticle.radialAcceleration = GravityParticleSystem.getValue(
-			this.radialAcceleration,
-			this.radialAccelerationVariance,
+			this._radialAcceleration,
+			this._radialAccelerationVariance,
 		);
 		locParticle.tangentialAcceleration = GravityParticleSystem.getValue(
-			this.tangentialAcceleration,
-			this.tangentialAccelerationVariance,
+			this._tangentialAcceleration,
+			this._tangentialAccelerationVariance,
 		);
 
-		let startSize = GravityParticleSystem.getValue(this.startSize, this.startSizeVariance);
+		let startSize = GravityParticleSystem.getValue(this._startSize, this._startSizeVariance);
 		if (startSize < 0.1) startSize = 0.1;
-		let endSize = GravityParticleSystem.getValue(this.endSize, this.endSizeVariance);
+		let endSize = GravityParticleSystem.getValue(this._endSize, this._endSizeVariance);
 		if (endSize < 0.1) endSize = 0.1;
 
 		const textureWidth = this.texture.textureWidth;
 		locParticle.scale = startSize / textureWidth;
 		locParticle.scaleDelta = (endSize - startSize) / lifespan / textureWidth;
 
-		const startRotation = GravityParticleSystem.getValue(this.startRotation, this.startRotationVariance);
-		const endRotation = GravityParticleSystem.getValue(this.endRotation, this.endRotationVariance);
+		const startRotation = GravityParticleSystem.getValue(this._startRotation, this._startRotationVariance);
+		const endRotation = GravityParticleSystem.getValue(this._endRotation, this._endRotationVariance);
 		locParticle.rotation = startRotation;
 		locParticle.rotationDelta = (endRotation - startRotation) / lifespan;
 
-		const startAlpha = GravityParticleSystem.getValue(this.startAlpha, this.startAlphaVariance);
-		const endAlpha = GravityParticleSystem.getValue(this.endAlpha, this.endAlphaVariance);
+		const startAlpha = GravityParticleSystem.getValue(this._startAlpha, this._startAlphaVariance);
+		const endAlpha = GravityParticleSystem.getValue(this._endAlpha, this._endAlphaVariance);
 
 		locParticle.alpha = startAlpha;
 		locParticle.alphaDelta = (endAlpha - startAlpha) / lifespan;
 
-		locParticle.blendMode = this.particleBlendMode;
+		locParticle.blendMode = this._particleBlendMode;
 	}
 
 	public override advanceParticle(particle: Particle, dt: number): void {
@@ -141,8 +178,8 @@ export class GravityParticleSystem extends ParticleSystem {
 		const finalTangentialX = -tangentialY * locParticle.tangentialAcceleration;
 		const finalTangentialY = temp * locParticle.tangentialAcceleration;
 
-		locParticle.velocityX += actualDt * (this.gravityX + radialX + finalTangentialX);
-		locParticle.velocityY += actualDt * (this.gravityY + radialY + finalTangentialY);
+		locParticle.velocityX += actualDt * (this._gravityX + radialX + finalTangentialX);
+		locParticle.velocityY += actualDt * (this._gravityY + radialY + finalTangentialY);
 		locParticle.x += locParticle.velocityX * actualDt;
 		locParticle.y += locParticle.velocityY * actualDt;
 
@@ -154,16 +191,18 @@ export class GravityParticleSystem extends ParticleSystem {
 
 	// ── Private methods ───────────────────────────────────────────────────────
 
-	private parseConfig(config: any): void {
+	private parseConfig(): void {
+		const config = this._config;
+
 		this.emitterX = getValue(config.emitter.x);
 		this.emitterY = getValue(config.emitter.y);
-		this.emitterXVariance = getValue(config.emitterVariance.x);
-		this.emitterYVariance = getValue(config.emitterVariance.y);
+		this._emitterXVariance = getValue(config.emitterVariance.x);
+		this._emitterYVariance = getValue(config.emitterVariance.y);
 
-		this.gravityX = getValue(config.gravity.x);
-		this.gravityY = getValue(config.gravity.y);
+		this._gravityX = getValue(config.gravity.x);
+		this._gravityY = getValue(config.gravity.y);
 
-		if (config.useEmitterRect === true) {
+		if (config.useEmitterRect === true && config.emitterRect) {
 			const bounds = new Rectangle();
 			bounds.x = getValue(config.emitterRect.x);
 			bounds.y = getValue(config.emitterRect.y);
@@ -174,36 +213,36 @@ export class GravityParticleSystem extends ParticleSystem {
 
 		this.maxParticles = getValue(config.maxParticles);
 
-		this.speed = getValue(config.speed);
-		this.speedVariance = getValue(config.speedVariance);
+		this._speed = getValue(config.speed);
+		this._speedVariance = getValue(config.speedVariance);
 
-		this.lifespan = Math.max(0.01, getValue(config.lifespan));
-		this.lifespanVariance = getValue(config.lifespanVariance);
+		this._lifespan = Math.max(0.01, getValue(config.lifespan));
+		this._lifespanVariance = getValue(config.lifespanVariance);
 
-		this.emitAngle = getValue(config.emitAngle);
-		this.emitAngleVariance = getValue(config.emitAngleVariance);
+		this._emitAngle = getValue(config.emitAngle);
+		this._emitAngleVariance = getValue(config.emitAngleVariance);
 
-		this.startSize = getValue(config.startSize);
-		this.startSizeVariance = getValue(config.startSizeVariance);
-		this.endSize = getValue(config.endSize);
-		this.endSizeVariance = getValue(config.endSizeVariance);
+		this._startSize = getValue(config.startSize);
+		this._startSizeVariance = getValue(config.startSizeVariance);
+		this._endSize = getValue(config.endSize);
+		this._endSizeVariance = getValue(config.endSizeVariance);
 
-		this.startRotation = getValue(config.startRotation);
-		this.startRotationVariance = getValue(config.startRotationVariance);
-		this.endRotation = getValue(config.endRotation);
-		this.endRotationVariance = getValue(config.endRotationVariance);
+		this._startRotation = getValue(config.startRotation);
+		this._startRotationVariance = getValue(config.startRotationVariance);
+		this._endRotation = getValue(config.endRotation);
+		this._endRotationVariance = getValue(config.endRotationVariance);
 
-		this.radialAcceleration = getValue(config.radialAcceleration);
-		this.radialAccelerationVariance = getValue(config.radialAccelerationVariance);
-		this.tangentialAcceleration = getValue(config.tangentialAcceleration);
-		this.tangentialAccelerationVariance = getValue(config.tangentialAccelerationVariance);
+		this._radialAcceleration = getValue(config.radialAcceleration);
+		this._radialAccelerationVariance = getValue(config.radialAccelerationVariance);
+		this._tangentialAcceleration = getValue(config.tangentialAcceleration);
+		this._tangentialAccelerationVariance = getValue(config.tangentialAccelerationVariance);
 
-		this.startAlpha = getValue(config.startAlpha);
-		this.startAlphaVariance = getValue(config.startAlphaVariance);
-		this.endAlpha = getValue(config.endAlpha);
-		this.endAlphaVariance = getValue(config.endAlphaVariance);
+		this._startAlpha = getValue(config.startAlpha);
+		this._startAlphaVariance = getValue(config.startAlphaVariance);
+		this._endAlpha = getValue(config.endAlpha);
+		this._endAlphaVariance = getValue(config.endAlphaVariance);
 
-		this.particleBlendMode = getValue(config.blendMode);
+		this._particleBlendMode = getValue(config.blendMode);
 	}
 
 	private static getValue(base: number, variance: number): number {

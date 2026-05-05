@@ -1,7 +1,6 @@
 import { Particle } from './Particle.js';
 
 export class GravityParticle extends Particle {
-
 	// ── Instance fields ───────────────────────────────────────────────────────
 
 	public startX = 0;
