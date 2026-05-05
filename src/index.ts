@@ -10,6 +10,12 @@ export { MovieClipData } from './blakron/display/MovieClipData.js';
 export { ScrollView, ScrollPolicy } from './blakron/display/ScrollView.js';
 export type { MovieClipFrame, MovieClipEvent } from './blakron/display/types.js';
 
+// ── Particle ──────────────────────────────────────────────────────────────────
+export { Particle } from './blakron/particle/Particle.js';
+export { GravityParticle } from './blakron/particle/GravityParticle.js';
+export { ParticleSystem } from './blakron/particle/ParticleSystem.js';
+export { GravityParticleSystem } from './blakron/particle/GravityParticleSystem.js';
+
 // ── Net ───────────────────────────────────────────────────────────────────────
 export { URLLoader } from './blakron/net/URLLoader.js';
 export { URLRequest } from './blakron/net/URLRequest.js';
