@@ -176,8 +176,8 @@ export class MovieClip extends Bitmap {
 
 	// ── Override methods ──────────────────────────────────────────────────────
 
-	public override onRemoveFromStage(): void {
-		super.onRemoveFromStage();
+	public override $onRemoveFromStage(): void {
+		super.$onRemoveFromStage();
 		this.stop();
 	}
 

@@ -28,7 +28,7 @@ export class Particle {
 		this.totalTime = 1000;
 	}
 
-	public getMatrix(regX: number, regY: number): Matrix {
+	public $getMatrix(regX: number, regY: number): Matrix {
 		const matrix = this._matrix;
 		matrix.identity();
 

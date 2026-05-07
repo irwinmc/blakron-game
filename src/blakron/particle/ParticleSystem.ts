@@ -107,7 +107,7 @@ export class ParticleSystem extends DisplayObject {
 	// ── Static fields ─────────────────────────────────────────────────────────
 
 	/**
-	 * Custom renderObjectType for particle systems.
+	 * Custom $renderObjectType for particle systems.
 	 * Value 6 — extends the core RenderObjectType enum without modifying core.
 	 */
 	public static readonly RENDER_TYPE_PARTICLE = 6 as const;
@@ -166,7 +166,7 @@ export class ParticleSystem extends DisplayObject {
 		super();
 		this.emissionRate = emissionRate;
 		this.texture = texture;
-		this.renderObjectType = ParticleSystem.RENDER_TYPE_PARTICLE as RenderObjectType;
+		this.$renderObjectType = ParticleSystem.RENDER_TYPE_PARTICLE as RenderObjectType;
 	}
 
 	// ── Getters / Setters ─────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ export class ParticleSystem extends DisplayObject {
 
 	// ── Overrides ─────────────────────────────────────────────────────────────
 
-	public override measureContentBounds(bounds: Rectangle): void {
+	public override $measureContentBounds(bounds: Rectangle): void {
 		if (this._relativeContentBounds) {
 			bounds.copyFrom(this._relativeContentBounds);
 			return;
@@ -387,7 +387,7 @@ export class ParticleSystem extends DisplayObject {
 			}
 		}
 
-		this.markDirty();
+		this.$markDirty();
 
 		if (this.numParticles === 0 && this.emissionTime === 0) {
 			ticker.stopTick(this._update, this);
@@ -425,7 +425,7 @@ export class ParticleSystem extends DisplayObject {
 		}
 		this.numParticles = 0;
 		this._pool.length = 0;
-		this.markDirty();
+		this.$markDirty();
 	}
 
 	private addOneParticle(): void {

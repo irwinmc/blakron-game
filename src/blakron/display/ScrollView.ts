@@ -264,8 +264,8 @@ export class ScrollView extends Sprite {
 
 	// ── Override methods ──────────────────────────────────────────────────────
 
-	public override onRemoveFromStage(): void {
-		super.onRemoveFromStage();
+	public override $onRemoveFromStage(): void {
+		super.$onRemoveFromStage();
 		this._stopInertia();
 		this._detachStageListeners();
 	}
