@@ -7,8 +7,20 @@ export type { TweenOptions, EaseFunction } from './blakron/tween/types.js';
 // ── Display ───────────────────────────────────────────────────────────────────
 export { MovieClip } from './blakron/display/MovieClip.js';
 export { MovieClipData } from './blakron/display/MovieClipData.js';
+export { MovieClipDataFactory } from './blakron/display/MovieClipDataFactory.js';
+export { MovieClipEvent } from './blakron/display/types.js';
 export { ScrollView, ScrollPolicy } from './blakron/display/ScrollView.js';
-export type { MovieClipFrame, MovieClipEvent } from './blakron/display/types.js';
+export type {
+	EgretMovieClipData,
+	EgretMovieClipDataSet,
+	EgretMovieClipEventData,
+	EgretMovieClipFrameData,
+	EgretMovieClipLabelData,
+	EgretMovieClipResourceData,
+	MovieClipFrame,
+	MovieClipEventType,
+	MovieClipLabel,
+} from './blakron/display/types.js';
 
 // ── Particle ──────────────────────────────────────────────────────────────────
 export { Particle } from './blakron/particle/Particle.js';

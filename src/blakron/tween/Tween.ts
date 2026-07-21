@@ -2,28 +2,24 @@ import { ticker } from '@blakron/core';
 import type { EaseFunction, SetStep, TweenOptions, TweenStep } from './types.js';
 import { Ease } from './Ease.js';
 
-/** Active tweens are kept in insertion order for deterministic ticking and O(1) removal. */
+// ── Global tween registry ───────────────────────────────────────────────────
+
 const _activeTweens = new Set<Tween>();
-/** Per-target counts support bulk target operations without mutating user objects. */
 const _tweenCounts = new WeakMap<object, number>();
-/** The ticker callback is registered only while at least one tween is active. */
 let _tickerRegistered = false;
-/** Global pause is checked by each tween so `ignoreGlobalPause` can opt out. */
 let _globalPaused = false;
-/** Undefined distinguishes an uninitialized clock from a valid zero timestamp. */
 let _lastTimeStamp: number | undefined;
 
-/** Returns the number of unreleased tweens currently associated with a target. */
+// ── Registry helpers ────────────────────────────────────────────────────────
+
 function _getTweenCount(target: object): number {
 	return _tweenCounts.get(target) ?? 0;
 }
 
-/** Increments the target count when a Tween enters the active registry. */
 function _incrementTweenCount(target: object): void {
 	_tweenCounts.set(target, _getTweenCount(target) + 1);
 }
 
-/** Decrements the target count and removes the weak entry when it reaches zero. */
 function _decrementTweenCount(target: object): void {
 	const count = _getTweenCount(target) - 1;
 	if (count <= 0) {
@@ -33,7 +29,8 @@ function _decrementTweenCount(target: object): void {
 	}
 }
 
-/** Converts legacy loop and repeat options into a count of additional passes. */
+// ── Option helpers ──────────────────────────────────────────────────────────
+
 function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined): number {
 	if (repeat === undefined) {
 		return loop ? -1 : 0;
@@ -44,7 +41,6 @@ function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined)
 	return Number.isFinite(repeat) ? Math.max(0, Math.floor(repeat)) : 0;
 }
 
-/** Rejects durations that could leave a step permanently incomplete or corrupt properties. */
 function _validateDuration(duration: number): number {
 	if (!Number.isFinite(duration) || duration < 0) {
 		throw new RangeError('Tween duration must be a finite non-negative number.');
@@ -52,7 +48,6 @@ function _validateDuration(duration: number): number {
 	return duration;
 }
 
-/** Rejects non-finite seek positions and clamps valid positions to the sequence start. */
 function _validatePosition(position: number): number {
 	if (!Number.isFinite(position)) {
 		throw new RangeError('Tween position must be a finite number.');
@@ -60,7 +55,8 @@ function _validatePosition(position: number): number {
 	return Math.max(0, position);
 }
 
-/** Subscribes the shared frame callback when the first active tween is created. */
+// ── Ticker helpers ──────────────────────────────────────────────────────────
+
 function _registerTicker(): void {
 	if (_tickerRegistered) {
 		return;
@@ -69,7 +65,6 @@ function _registerTicker(): void {
 	ticker.startTick(_globalTick, null);
 }
 
-/** Unsubscribes the shared frame callback after the final tween is released. */
 function _unregisterTicker(): void {
 	if (!_tickerRegistered) {
 		return;
@@ -97,7 +92,8 @@ function _globalTick(timeStamp: number): boolean {
 	return false;
 }
 
-/** Adds a tween to frame processing and starts the shared ticker on the empty-to-active transition. */
+// ── Lifecycle helpers ───────────────────────────────────────────────────────
+
 function _addActive(tween: Tween): void {
 	if (_activeTweens.size === 0) {
 		_registerTicker();
@@ -105,7 +101,6 @@ function _addActive(tween: Tween): void {
 	_activeTweens.add(tween);
 }
 
-/** Removes a tween from frame processing and stops the ticker when the set becomes empty. */
 function _removeActive(tween: Tween): void {
 	if (!_activeTweens.delete(tween) || _activeTweens.size !== 0) {
 		return;
@@ -133,13 +128,18 @@ function _releaseTween(tween: Tween): void {
 }
 
 /**
- * Tween engine with repeat, yoyo, and thenable completion.
+ * Property animation sequence with repeat, yoyo, and thenable completion.
  *
- * A Tween instance represents one animation lifecycle and is never reused for
- * another target. Holding a completed instance is therefore safe: it can no
- * longer control a subsequently created tween.
+ * @example
+ * ```ts
+ * await Tween.get(sprite)
+ * 	.to({ x: 200, alpha: 0 }, 300, Ease.cubicOut)
+ * 	.wait(100);
+ * ```
  */
 export class Tween {
+	// ── Static methods ────────────────────────────────────────────────────────
+
 	/**
 	 * Creates a Tween for a target.
 	 */
@@ -218,22 +218,17 @@ export class Tween {
 		_globalPaused = false;
 	}
 
-	/** The target also acts as the lifecycle marker: undefined means released. */
+	// ── Instance fields ───────────────────────────────────────────────────────
+
 	_target?: object;
-	/** Ordered step queue for the initial forward pass. */
 	private _steps: TweenStep[] = [];
-	/** Position inside the current pass, independent of the canonical step order. */
 	private _stepIndex = 0;
 	private _stepElapsed = 0;
-	/** Avoids scanning the complete step queue on every frame. */
 	private _hasTimedSteps = false;
-	/** Defers options.position until chained steps have been appended. */
 	private _pendingPosition?: number;
 	private _paused = false;
-	/** Additional passes remaining; -1 means infinite repetition. */
 	private _repeatsLeft = 0;
 	private _yoyo = false;
-	/** True while a yoyo cycle traverses the same steps in reverse order. */
 	private _reversed = false;
 	private _ignoreGlobalPause = false;
 	private _defaultEase: EaseFunction = Ease.linear;
@@ -245,12 +240,16 @@ export class Tween {
 	private _releaseListeners: Array<() => void> = [];
 	private _isCompleted = false;
 
+	// ── Getters / Setters ─────────────────────────────────────────────────────
+
 	/**
 	 * Whether the tween has not yet completed or been removed.
 	 */
 	public get isActive(): boolean {
 		return this._target !== undefined;
 	}
+
+	// ── Public methods ────────────────────────────────────────────────────────
 
 	/**
 	 * Resolves with `undefined` when the tween completes or is removed.
@@ -268,19 +267,6 @@ export class Tween {
 				this._resolvers.push(resolve);
 			}
 		}).then(onfulfilled, onrejected);
-	}
-
-	/**
-	 * Registers cleanup used by TweenGroup. Listeners added after completion run
-	 * immediately, so callers never retain an already inactive tween.
-	 * @internal
-	 */
-	public _addReleaseListener(listener: () => void): void {
-		if (this._isCompleted) {
-			listener();
-			return;
-		}
-		this._releaseListeners.push(listener);
 	}
 
 	/**
@@ -379,12 +365,16 @@ export class Tween {
 		}
 	}
 
-	/**
-	 * Advances the current cycle. Unconsumed time carries into later steps and
-	 * later repeat cycles, so one large frame delta still produces the correct
-	 * final state.
-	 * @internal
-	 */
+	// ── Internal methods ──────────────────────────────────────────────────────
+
+	public _addReleaseListener(listener: () => void): void {
+		if (this._isCompleted) {
+			listener();
+			return;
+		}
+		this._releaseListeners.push(listener);
+	}
+
 	public _tick(deltaTime: number): void {
 		if (this._paused || (!this._ignoreGlobalPause && _globalPaused) || !this._target) {
 			return;
@@ -452,7 +442,38 @@ export class Tween {
 		this._notifyChange();
 	}
 
-	/** Initializes one new, non-reusable Tween lifecycle from creation options. */
+	public _notifyRelease(): void {
+		const listeners = this._releaseListeners;
+		this._releaseListeners = [];
+		for (const listener of listeners) {
+			listener();
+		}
+	}
+
+	public _resolveAll(): void {
+		this._isCompleted = true;
+		const resolvers = this._resolvers;
+		this._resolvers = [];
+		for (const resolve of resolvers) {
+			resolve();
+		}
+	}
+
+	public _dispose(): void {
+		this._steps = [];
+		this._stepIndex = 0;
+		this._stepElapsed = 0;
+		this._hasTimedSteps = false;
+		this._pendingPosition = undefined;
+		this._onChange = undefined;
+		this._onChangeObj = undefined;
+		this._onLoopComplete = undefined;
+		this._onLoopCompleteObj = undefined;
+		this._releaseListeners = [];
+	}
+
+	// ── Private methods ───────────────────────────────────────────────────────
+
 	private _initialize(target: object, options?: TweenOptions): void {
 		this._target = target;
 		this._steps = [];
@@ -618,38 +639,5 @@ export class Tween {
 		if (this._onChange) {
 			this._onChange.call(this._onChangeObj ?? this._target, this);
 		}
-	}
-
-	/** @internal Notifies owners after the tween becomes inactive. */
-	public _notifyRelease(): void {
-		const listeners = this._releaseListeners;
-		this._releaseListeners = [];
-		for (const listener of listeners) {
-			listener();
-		}
-	}
-
-	/** @internal Settles every pending thenable subscription exactly once. */
-	public _resolveAll(): void {
-		this._isCompleted = true;
-		const resolvers = this._resolvers;
-		this._resolvers = [];
-		for (const resolve of resolvers) {
-			resolve();
-		}
-	}
-
-	/** @internal Drops queued steps and callbacks after a terminal transition. */
-	public _dispose(): void {
-		this._steps = [];
-		this._stepIndex = 0;
-		this._stepElapsed = 0;
-		this._hasTimedSteps = false;
-		this._pendingPosition = undefined;
-		this._onChange = undefined;
-		this._onChangeObj = undefined;
-		this._onLoopComplete = undefined;
-		this._onLoopCompleteObj = undefined;
-		this._releaseListeners = [];
 	}
 }

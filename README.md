@@ -85,48 +85,48 @@ group.removeAll();
 
 ### MovieClip
 
-Sequence-frame animation display object. Extends `Bitmap` and drives frame changes via the engine ticker.
+Sequence-frame animation display object. Extends `Bitmap`; the external game loop owns timing and calls `advanceFrame()` once per scheduled animation step.
 
 ```ts
-import { MovieClip, MovieClipData } from '@blakron/game';
-import { Event } from '@blakron/core';
+import { MovieClip, MovieClipData, MovieClipDataFactory, MovieClipEvent } from '@blakron/game';
+import { Event, getTimer } from '@blakron/core';
 
-// Build frame data from textures
-const data = MovieClipData.fromTextureArray([tex1, tex2, tex3], 12);
-
-// From a SpriteSheet
-const data2 = MovieClipData.fromSpriteSheet(sheet, ['run_01', 'run_02', 'run_03'], 24);
-
-// Frame events — dispatched when a specific frame is reached
-data.setFrameEvent(2, 'footstep'); // 0-based index
+// Parse an Egret MovieClip JSON data set with its atlas texture.
+// MovieClipDataFactory internally creates a core SpriteSheet.
+const factory = new MovieClipDataFactory(egretMcData, atlasTexture);
+const data = factory.generateMovieClipData('run');
+if (!data) throw new Error('MovieClip data not found');
 
 const mc = new MovieClip(data);
-mc.addEventListener('footstep', () => playSound());
-
-// Playback
+mc.addEventListener(MovieClipEvent.COMPLETE, () => console.log('done'));
 mc.play(-1); // loop forever
-mc.play(3); // play 3 times then stop
-mc.play(0); // don't change current play count (Egret-compatible)
-mc.stop();
+stage.addChild(mc);
 
-mc.gotoAndPlay('attack'); // jump to label and play
-mc.gotoAndStop(5); // jump to frame 5 (1-based) and stop
+// One external loop owns the logical animation cadence for all MovieClips.
+const playingClips = [mc];
+const frameDuration = 1000 / 12;
+let elapsed = 0;
+let lastTime = getTimer();
+stage.addEventListener(Event.ENTER_FRAME, () => {
+	const now = getTimer();
+	elapsed += now - lastTime;
+	lastTime = now;
+
+	while (elapsed >= frameDuration) {
+		elapsed -= frameDuration;
+		for (const clip of playingClips) {
+			clip.advanceFrame();
+		}
+	}
+});
+
+// Manual navigation APIs stop playback.
+mc.gotoAndStop(5); // 1-based frame number
 mc.prevFrame();
 mc.nextFrame();
 
-// Events
-mc.addEventListener(Event.COMPLETE, () => console.log('done'));
-mc.addEventListener(Event.LOOP_COMPLETE, () => console.log('loop'));
-
-// Properties
-console.log(mc.currentFrame); // 1-based frame number
-console.log(mc.totalFrames);
-console.log(mc.currentFrameLabel); // label of current frame, or undefined
-console.log(mc.currentLabel); // nearest preceding label
-console.log(mc.frameRate); // fps (override per-clip)
-console.log(mc.isPlaying);
-
-stage.addChild(mc);
+// gotoAndPlay begins a new externally-driven playback session.
+mc.gotoAndPlay('attack', 3);
 ```
 
 ### ScrollView
@@ -265,29 +265,39 @@ loader.close();
 
 ### MovieClip
 
-| Member                        | Description                                                    |
-| ----------------------------- | -------------------------------------------------------------- |
-| `play(playTimes?)`            | Play. `-1` = loop, `0` = keep current setting, `>=1` = N times |
-| `stop()`                      | Stop on current frame                                          |
-| `gotoAndPlay(frame)`          | Jump to frame/label and play                                   |
-| `gotoAndStop(frame)`          | Jump to frame/label and stop                                   |
-| `prevFrame()` / `nextFrame()` | Step one frame                                                 |
-| `currentFrame`                | Current frame number, 1-based (read-only)                      |
-| `totalFrames`                 | Total frame count (read-only)                                  |
-| `currentFrameLabel`           | Label of current frame, or `undefined`                         |
-| `currentLabel`                | Nearest preceding labeled frame, or `undefined`                |
-| `frameRate`                   | Per-clip fps override (NaN = use data's rate)                  |
-| `isPlaying`                   | Playback state (read-only)                                     |
-| `movieClipData`               | Frame data source                                              |
+| Member                           | Description                                              |
+| -------------------------------- | -------------------------------------------------------- |
+| `play(playTimes?)`               | Start/resume; external code controls the frame schedule  |
+| `advanceFrame()`                 | Advance exactly one externally scheduled animation frame |
+| `stop()`                         | Stop on current frame                                    |
+| `gotoAndPlay(frame, playTimes?)` | Jump to frame/label and start a new playback session     |
+| `gotoAndStop(frame)`             | Jump to frame/label and stop                             |
+| `prevFrame()` / `nextFrame()`    | Manually step one frame and stop                         |
+| `currentFrame`                   | Current frame number, 1-based (read-only)                |
+| `totalFrames`                    | Total frame count (read-only)                            |
+| `currentFrameLabel`              | Label of current frame, or `undefined`                   |
+| `currentLabel`                   | Nearest preceding labeled frame, or `undefined`          |
+| `isPlaying`                      | Playback state (read-only)                               |
+| `movieClipData`                  | Frame data source                                        |
 
 ### MovieClipData
 
-| Method                                     | Description                          |
-| ------------------------------------------ | ------------------------------------ |
-| `addFrame(texture, duration, label?)`      | Append a frame                       |
-| `setFrameEvent(frameIndex, eventName)`     | Dispatch event when frame is reached |
-| `fromTextureArray(textures, fps?)`         | Static factory from texture array    |
-| `fromSpriteSheet(sheet, frameNames, fps?)` | Static factory from sprite sheet     |
+| Method                                       | Description                                                  |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `addFrame(texture, duration, label?)`        | Append a logical frame                                       |
+| `setFrameLabel(name, startFrame, endFrame?)` | Define a 0-based inclusive label playback range              |
+| `setFrameEvent(frameIndex, eventName)`       | Dispatch event when frame is reached                         |
+| `fromTextureArray(textures, fps?)`           | Static factory from texture array                            |
+| `fromSpriteSheet(sheet, frameNames, fps?)`   | Static factory from already-resolved SpriteSheet frame names |
+
+### MovieClipDataFactory
+
+| Member                                       | Description                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `new MovieClipDataFactory(dataSet, texture)` | Parse Egret `mc` / `res` JSON with an atlas texture                 |
+| `generateMovieClipData(name?)`               | Generate (and optionally cache) data for a named exported MovieClip |
+| `clearCache()`                               | Clear generated MovieClipData instances                             |
+| `enableCache`                                | Toggle generated data caching                                       |
 
 ### URLVariables
 
