@@ -186,6 +186,32 @@ describe('MovieClip external frame control', () => {
 		expect(loops).toHaveBeenCalledTimes(4);
 		expect(clip.isPlaying).toBe(true);
 	});
+
+	it('keeps finite playback within an inclusive label range', () => {
+		const data = createData([100, 100, 100, 100]);
+		data.setFrameLabel('attack', 1, 2);
+		const clip = new MovieClip(data);
+		const loops = vi.fn();
+		const completes = vi.fn();
+		clip.addEventListener(MovieClipEvent.LOOP_COMPLETE, loops);
+		clip.addEventListener(MovieClipEvent.COMPLETE, completes);
+
+		clip.gotoAndPlay('attack', 2);
+		expect(clip.currentFrame).toBe(2);
+
+		clip.advanceFrame();
+		expect(clip.currentFrame).toBe(3);
+		clip.advanceFrame();
+		expect(clip.currentFrame).toBe(2);
+		clip.advanceFrame();
+		expect(clip.currentFrame).toBe(3);
+		clip.advanceFrame();
+
+		expect(loops).toHaveBeenCalledTimes(1);
+		expect(completes).toHaveBeenCalledTimes(1);
+		expect(clip.currentFrame).toBe(3);
+		expect(clip.isPlaying).toBe(false);
+	});
 });
 
 describe('MovieClip control and lifecycle', () => {
