@@ -3,7 +3,7 @@ import { Tween } from '../src/blakron/tween/Tween.js';
 import { TweenGroup } from '../src/blakron/tween/TweenGroup.js';
 
 describe('TweenGroup', () => {
-	it('removeAll() actually removes and recycles every tween it tracks', () => {
+	it('removeAll() removes every tween it tracks', () => {
 		const targetA = { x: 0 };
 		const targetB = { x: 0 };
 		const group = new TweenGroup('test');
@@ -80,5 +80,26 @@ describe('TweenGroup lifecycle safety', () => {
 		group.add(tween);
 
 		expect(group.size).toBe(0);
+	});
+});
+
+describe('TweenGroup active members', () => {
+	it('deduplicates active additions and controls their pause lifecycle', () => {
+		const target = { x: 0 };
+		const group = new TweenGroup('test');
+		const tween = Tween.get(target).to({ x: 100 }, 100);
+
+		group.add(tween);
+		group.add(tween);
+		expect(group.size).toBe(1);
+
+		group.pause();
+		tween._tick(50);
+		expect(target.x).toBe(0);
+
+		group.resume();
+		tween._tick(50);
+		expect(target.x).toBe(50);
+		tween.remove();
 	});
 });

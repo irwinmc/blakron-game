@@ -130,6 +130,7 @@ export const Ease = {
 	getElasticInOut: (amplitude: number, period: number): EaseFunction => {
 		const pi2 = Math.PI * 2;
 		return (t: number): number => {
+			if (t === 0 || t === 1) return t;
 			const s = (period / pi2) * Math.asin(1 / amplitude);
 			const t2 = t * 2;
 			if (t2 < 1)
@@ -203,7 +204,7 @@ export const Ease = {
 			let lower = 0;
 			let upper = 1;
 			t = progress;
-			for (let i = 0; i < 12; i++) {
+			for (let i = 0; i < 24; i++) {
 				const value = sampleX(t);
 				if (Math.abs(value - progress) < 1e-6) {
 					break;

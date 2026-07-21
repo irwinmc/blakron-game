@@ -13,14 +13,17 @@ let _globalPaused = false;
 /** Undefined distinguishes an uninitialized clock from a valid zero timestamp. */
 let _lastTimeStamp: number | undefined;
 
+/** Returns the number of unreleased tweens currently associated with a target. */
 function _getTweenCount(target: object): number {
 	return _tweenCounts.get(target) ?? 0;
 }
 
+/** Increments the target count when a Tween enters the active registry. */
 function _incrementTweenCount(target: object): void {
 	_tweenCounts.set(target, _getTweenCount(target) + 1);
 }
 
+/** Decrements the target count and removes the weak entry when it reaches zero. */
 function _decrementTweenCount(target: object): void {
 	const count = _getTweenCount(target) - 1;
 	if (count <= 0) {
@@ -30,6 +33,7 @@ function _decrementTweenCount(target: object): void {
 	}
 }
 
+/** Converts legacy loop and repeat options into a count of additional passes. */
 function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined): number {
 	if (repeat === undefined) {
 		return loop ? -1 : 0;
@@ -40,6 +44,7 @@ function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined)
 	return Number.isFinite(repeat) ? Math.max(0, Math.floor(repeat)) : 0;
 }
 
+/** Rejects durations that could leave a step permanently incomplete or corrupt properties. */
 function _validateDuration(duration: number): number {
 	if (!Number.isFinite(duration) || duration < 0) {
 		throw new RangeError('Tween duration must be a finite non-negative number.');
@@ -47,6 +52,7 @@ function _validateDuration(duration: number): number {
 	return duration;
 }
 
+/** Rejects non-finite seek positions and clamps valid positions to the sequence start. */
 function _validatePosition(position: number): number {
 	if (!Number.isFinite(position)) {
 		throw new RangeError('Tween position must be a finite number.');
@@ -54,6 +60,7 @@ function _validatePosition(position: number): number {
 	return Math.max(0, position);
 }
 
+/** Subscribes the shared frame callback when the first active tween is created. */
 function _registerTicker(): void {
 	if (_tickerRegistered) {
 		return;
@@ -62,6 +69,7 @@ function _registerTicker(): void {
 	ticker.startTick(_globalTick, null);
 }
 
+/** Unsubscribes the shared frame callback after the final tween is released. */
 function _unregisterTicker(): void {
 	if (!_tickerRegistered) {
 		return;
@@ -89,6 +97,7 @@ function _globalTick(timeStamp: number): boolean {
 	return false;
 }
 
+/** Adds a tween to frame processing and starts the shared ticker on the empty-to-active transition. */
 function _addActive(tween: Tween): void {
 	if (_activeTweens.size === 0) {
 		_registerTicker();
@@ -96,6 +105,7 @@ function _addActive(tween: Tween): void {
 	_activeTweens.add(tween);
 }
 
+/** Removes a tween from frame processing and stops the ticker when the set becomes empty. */
 function _removeActive(tween: Tween): void {
 	if (!_activeTweens.delete(tween) || _activeTweens.size !== 0) {
 		return;
@@ -442,6 +452,7 @@ export class Tween {
 		this._notifyChange();
 	}
 
+	/** Initializes one new, non-reusable Tween lifecycle from creation options. */
 	private _initialize(target: object, options?: TweenOptions): void {
 		this._target = target;
 		this._steps = [];
@@ -529,6 +540,7 @@ export class Tween {
 		return this._reversed ? this._steps.length - 1 - index : index;
 	}
 
+	/** Applies one interpolated `to` or `from` step at an uneased normalized progress value. */
 	private _applyStep(step: TweenStep, progress: number): void {
 		const target = this._target as Record<string, unknown>;
 		if (step.type === 'to') {
@@ -546,6 +558,7 @@ export class Tween {
 		}
 	}
 
+	/** Executes a non-interpolated forward step; only callbacks and property sets reach this method. */
 	private _executeInstantStep(step: TweenStep): void {
 		if (step.type === 'call') {
 			step.fn.apply(step.thisObj ?? this._target, step.params);
@@ -554,6 +567,7 @@ export class Tween {
 		}
 	}
 
+	/** Copies a `set` step's values to the target without invoking user code. */
 	private _applySetStep(step: SetStep): void {
 		const target = this._target as Record<string, unknown>;
 		for (const key of Object.keys(step.props)) {
@@ -599,6 +613,7 @@ export class Tween {
 		}
 	}
 
+	/** Invokes the per-update observer with its configured receiver or the tween target. */
 	private _notifyChange(): void {
 		if (this._onChange) {
 			this._onChange.call(this._onChangeObj ?? this._target, this);
