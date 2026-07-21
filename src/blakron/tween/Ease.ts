@@ -1,16 +1,7 @@
 import type { EaseFunction } from './types.js';
 
 /**
- * Collection of easing functions compatible with Egret's Ease API.
- *
- * All functions take a normalized time t ∈ [0, 1] and return an eased value.
- * Factory methods (getPowIn, getElasticOut, etc.) mirror the original Egret API.
- *
- * @example
- * ```ts
- * Tween.get(obj).to({ x: 100 }, 500, Ease.cubicOut);
- * Tween.get(obj).to({ x: 100 }, 500, Ease.getPowOut(4));
- * ```
+ * Egret-compatible easing functions.
  */
 export const Ease = {
 	// ── Linear ───────────────────────────────────────────────────────────────

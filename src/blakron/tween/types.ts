@@ -1,25 +1,56 @@
+import type { Tween } from './Tween.js';
+
 /**
- * Easing function signature — takes normalized time t ∈ [0, 1] and returns an eased value.
+ * Maps normalized progress to eased progress.
  */
 export type EaseFunction = (t: number) => number;
 
 /**
- * Options passed to `Tween.get()`.
+ * Configures a Tween created by `Tween.get()`.
  */
 export interface TweenOptions {
+	/**
+	 * Repeats indefinitely when `repeat` is not set.
+	 */
 	loop?: boolean;
+	/**
+	 * Number of additional playback cycles; `-1` repeats indefinitely.
+	 */
+	repeat?: number;
+	/**
+	 * Alternates playback direction between cycles.
+	 */
+	yoyo?: boolean;
+	/**
+	 * Allows the tween to advance while all tweens are globally paused.
+	 */
 	ignoreGlobalPause?: boolean;
+	/**
+	 * Default easing function for property steps.
+	 */
 	ease?: EaseFunction;
-	/** Egret-compatible: start the tween in paused state. */
+	/**
+	 * Starts the tween in a paused state.
+	 */
 	paused?: boolean;
-	/** Egret-compatible: jump to this time position (ms) immediately after creation. */
+	/**
+	 * Initial sequence position in milliseconds.
+	 */
 	position?: number;
-	/** Egret-compatible: callback fired on every tick while the tween is running. */
-	onChange?: (tween: unknown) => void;
-	/** Egret-compatible: `this` context for the onChange callback. */
+	/**
+	 * Runs after each tween update.
+	 */
+	onChange?: (tween: Tween) => void;
+	/**
+	 * Provides the `this` value for `onChange`.
+	 */
 	onChangeObj?: object;
-	/** Callback fired each time a looping tween completes one cycle. */
-	onLoopComplete?: (tween: unknown) => void;
-	/** `this` context for the onLoopComplete callback. */
+	/**
+	 * Runs after each repeated cycle.
+	 */
+	onLoopComplete?: (tween: Tween) => void;
+	/**
+	 * Provides the `this` value for `onLoopComplete`.
+	 */
 	onLoopCompleteObj?: object;
 }

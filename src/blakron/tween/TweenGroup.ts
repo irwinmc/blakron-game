@@ -2,18 +2,7 @@ import { Tween } from './Tween.js';
 import type { TweenOptions } from './types.js';
 
 /**
- * Manages a named group of Tween instances.
- * Allows pausing, resuming, and removing all tweens in the group together.
- *
- * @example
- * ```ts
- * const group = new TweenGroup('ui');
- * group.get(btnA).to({ alpha: 0 }, 300);
- * group.get(btnB).to({ alpha: 0 }, 300);
- * group.pause();
- * group.resume();
- * group.removeAll();
- * ```
+ * Manages a named collection of Tween instances.
  */
 export class TweenGroup {
 	// ── Instance fields ───────────────────────────────────────────────────────
@@ -30,7 +19,7 @@ export class TweenGroup {
 	// ── Getters / Setters ─────────────────────────────────────────────────────
 
 	/**
-	 * Number of tweens currently tracked by this group.
+	 * Returns the number of tracked tweens.
 	 */
 	public get size(): number {
 		return this._tweens.length;
@@ -39,25 +28,23 @@ export class TweenGroup {
 	// ── Public methods ────────────────────────────────────────────────────────
 
 	/**
-	 * Create a Tween for the given target and register it in this group.
+	 * Creates and tracks a Tween.
 	 */
 	public get(target: object, options?: TweenOptions): Tween {
 		const tween = Tween.get(target, options);
-		this._tweens.push(tween);
+		this._track(tween);
 		return tween;
 	}
 
 	/**
-	 * Add an externally created Tween to this group.
+	 * Tracks an existing Tween.
 	 */
 	public add(tween: Tween): void {
-		if (!this._tweens.includes(tween)) {
-			this._tweens.push(tween);
-		}
+		this._track(tween);
 	}
 
 	/**
-	 * Pause all tweens in this group.
+	 * Pauses every tracked Tween.
 	 */
 	public pause(): void {
 		for (const tween of this._tweens) {
@@ -66,7 +53,7 @@ export class TweenGroup {
 	}
 
 	/**
-	 * Resume all tweens in this group.
+	 * Resumes every tracked Tween.
 	 */
 	public resume(): void {
 		for (const tween of this._tweens) {
@@ -75,12 +62,27 @@ export class TweenGroup {
 	}
 
 	/**
-	 * Remove all tweens in this group from the active list.
+	 * Removes every tracked Tween.
 	 */
 	public removeAll(): void {
-		for (const tween of this._tweens) {
-			Tween.removeTweens(tween as unknown as object);
+		for (const tween of this._tweens.slice()) {
+			tween.remove();
 		}
 		this._tweens = [];
+	}
+
+	// ── Private methods ───────────────────────────────────────────────────────
+
+	private _track(tween: Tween): void {
+		if (this._tweens.includes(tween)) {
+			return;
+		}
+		this._tweens.push(tween);
+		tween._addReleaseListener(() => {
+			const index = this._tweens.indexOf(tween);
+			if (index !== -1) {
+				this._tweens.splice(index, 1);
+			}
+		});
 	}
 }
