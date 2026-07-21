@@ -1,13 +1,17 @@
 import type { EaseFunction } from './types.js';
 
 /**
- * Egret-compatible easing functions.
+ * Easing functions for normalized progress values.
+ *
+ * Functions do not clamp input, allowing callers to intentionally use easing
+ * curves that overshoot outside the usual [0, 1] range.
  */
 export const Ease = {
 	// ── Linear ───────────────────────────────────────────────────────────────
 	linear: (t: number): number => t,
 
 	// ── Configurable factories ────────────────────────────────────────────────
+	/** Produces an adjustable quadratic curve; amount is clamped to [-1, 1]. */
 	get: (amount: number): EaseFunction => {
 		const a = Math.max(-1, Math.min(1, amount));
 		return (t: number): number => {
@@ -166,18 +170,52 @@ export const Ease = {
 		t < 0.5 ? (1 - Ease.bounceOut(1 - 2 * t)) / 2 : (1 + Ease.bounceOut(2 * t - 1)) / 2,
 
 	/**
-	 * Create a custom cubic bezier easing function.
+	 * Creates a custom cubic-bezier easing function.
+	 *
+	 * The supplied progress is an x-coordinate. The corresponding curve
+	 * parameter is found with Newton iteration, falling back to bounded binary
+	 * search near flat derivatives, then used to sample the y-coordinate.
 	 */
 	cubicBezier(x1: number, y1: number, x2: number, y2: number): EaseFunction {
-		return (t: number): number => {
-			let x = t;
+		const sampleX = (t: number): number => 3 * x1 * t * (1 - t) * (1 - t) + 3 * x2 * t * t * (1 - t) + t * t * t;
+		const sampleY = (t: number): number => 3 * y1 * t * (1 - t) * (1 - t) + 3 * y2 * t * t * (1 - t) + t * t * t;
+		const sampleXDerivative = (t: number): number =>
+			3 * x1 * (1 - t) * (1 - t) + 6 * (x2 - x1) * t * (1 - t) + 3 * (1 - x2) * t * t;
+
+		return (progress: number): number => {
+			let t = progress;
 			for (let i = 0; i < 8; i++) {
-				const cx = 3 * x1 * x * (1 - x) * (1 - x) + 3 * x2 * x * x * (1 - x) + x * x * x - t;
-				const dx = 3 * x1 * (1 - x) * (1 - x) + 6 * x2 * x * (1 - x) - 3 * x1 * x * (1 - x) * 2 + 3 * x * x;
-				if (Math.abs(cx) < 1e-6) break;
-				x -= cx / dx;
+				const error = sampleX(t) - progress;
+				if (Math.abs(error) < 1e-6) {
+					return sampleY(t);
+				}
+				const derivative = sampleXDerivative(t);
+				if (Math.abs(derivative) < 1e-6) {
+					break;
+				}
+				const next = t - error / derivative;
+				if (next < 0 || next > 1) {
+					break;
+				}
+				t = next;
 			}
-			return 3 * y1 * x * (1 - x) * (1 - x) + 3 * y2 * x * x * (1 - x) + x * x * x;
+
+			let lower = 0;
+			let upper = 1;
+			t = progress;
+			for (let i = 0; i < 12; i++) {
+				const value = sampleX(t);
+				if (Math.abs(value - progress) < 1e-6) {
+					break;
+				}
+				if (value < progress) {
+					lower = t;
+				} else {
+					upper = t;
+				}
+				t = (lower + upper) / 2;
+			}
+			return sampleY(t);
 		};
 	},
 } as const;

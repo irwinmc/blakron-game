@@ -1,69 +1,33 @@
 import { ticker } from '@blakron/core';
-import type { EaseFunction, TweenOptions } from './types.js';
+import type { EaseFunction, SetStep, TweenOptions, TweenStep } from './types.js';
 import { Ease } from './Ease.js';
 
-// ── Step types ────────────────────────────────────────────────────────────────
-
-type StepType = 'to' | 'from' | 'wait' | 'call' | 'set';
-
-interface BaseStep {
-	type: StepType;
-	duration: number;
-}
-
-interface ToStep extends BaseStep {
-	type: 'to';
-	props: Record<string, number>;
-	ease: EaseFunction;
-	startValues?: Record<string, number>;
-}
-
-interface FromStep extends BaseStep {
-	type: 'from';
-	props: Record<string, number>;
-	ease: EaseFunction;
-	endValues?: Record<string, number>;
-}
-
-interface WaitStep extends BaseStep {
-	type: 'wait';
-}
-
-interface CallStep extends BaseStep {
-	type: 'call';
-	fn: (...args: unknown[]) => void;
-	thisObj?: object;
-	params: unknown[];
-}
-
-interface SetStep extends BaseStep {
-	type: 'set';
-	props: Record<string, unknown>;
-}
-
-type TweenStep = ToStep | FromStep | WaitStep | CallStep | SetStep;
-
-// ── Global tween registry ─────────────────────────────────────────────────────
-
-const _activeTweens: Tween[] = [];
-let _tickerRegistered = false;
-let _globalPaused = false;
-let _lastTimeStamp = 0;
-
+/** Active tweens are kept in insertion order for deterministic ticking and O(1) removal. */
+const _activeTweens = new Set<Tween>();
+/** Per-target counts support bulk target operations without mutating user objects. */
 const _tweenCounts = new WeakMap<object, number>();
+/** The ticker callback is registered only while at least one tween is active. */
+let _tickerRegistered = false;
+/** Global pause is checked by each tween so `ignoreGlobalPause` can opt out. */
+let _globalPaused = false;
+/** Undefined distinguishes an uninitialized clock from a valid zero timestamp. */
+let _lastTimeStamp: number | undefined;
 
 function _getTweenCount(target: object): number {
 	return _tweenCounts.get(target) ?? 0;
 }
 
-function _incTweenCount(target: object): void {
-	_tweenCounts.set(target, (_tweenCounts.get(target) ?? 0) + 1);
+function _incrementTweenCount(target: object): void {
+	_tweenCounts.set(target, _getTweenCount(target) + 1);
 }
 
-function _decTweenCount(target: object): void {
-	const n = (_tweenCounts.get(target) ?? 1) - 1;
-	if (n <= 0) _tweenCounts.delete(target);
-	else _tweenCounts.set(target, n);
+function _decrementTweenCount(target: object): void {
+	const count = _getTweenCount(target) - 1;
+	if (count <= 0) {
+		_tweenCounts.delete(target);
+	} else {
+		_tweenCounts.set(target, count);
+	}
 }
 
 function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined): number {
@@ -73,171 +37,193 @@ function _normalizeRepeat(repeat: number | undefined, loop: boolean | undefined)
 	if (repeat === -1) {
 		return -1;
 	}
-	if (!Number.isFinite(repeat)) {
-		return 0;
+	return Number.isFinite(repeat) ? Math.max(0, Math.floor(repeat)) : 0;
+}
+
+function _validateDuration(duration: number): number {
+	if (!Number.isFinite(duration) || duration < 0) {
+		throw new RangeError('Tween duration must be a finite non-negative number.');
 	}
-	return Math.max(0, Math.floor(repeat));
+	return duration;
+}
+
+function _validatePosition(position: number): number {
+	if (!Number.isFinite(position)) {
+		throw new RangeError('Tween position must be a finite number.');
+	}
+	return Math.max(0, position);
 }
 
 function _registerTicker(): void {
-	if (_tickerRegistered) return;
+	if (_tickerRegistered) {
+		return;
+	}
 	_tickerRegistered = true;
 	ticker.startTick(_globalTick, null);
 }
 
+function _unregisterTicker(): void {
+	if (!_tickerRegistered) {
+		return;
+	}
+	_tickerRegistered = false;
+	_lastTimeStamp = undefined;
+	ticker.stopTick(_globalTick, null);
+}
+
+/**
+ * Advances a snapshot so callbacks may add or remove tweens without affecting
+ * the current traversal. Newly created tweens begin on the following frame.
+ */
 function _globalTick(timeStamp: number): boolean {
-	if (_lastTimeStamp === 0) {
+	if (_lastTimeStamp === undefined) {
 		_lastTimeStamp = timeStamp;
 		return false;
 	}
-	const dt = timeStamp - _lastTimeStamp;
-	_lastTimeStamp = timeStamp;
 
-	const list = _activeTweens.slice();
-	for (const tween of list) {
-		tween._tick(dt);
+	const deltaTime = timeStamp - _lastTimeStamp;
+	_lastTimeStamp = timeStamp;
+	for (const tween of [..._activeTweens]) {
+		tween._tick(deltaTime);
 	}
 	return false;
 }
 
 function _addActive(tween: Tween): void {
-	if (!_activeTweens.includes(tween)) {
-		_activeTweens.push(tween);
+	if (_activeTweens.size === 0) {
 		_registerTicker();
 	}
+	_activeTweens.add(tween);
 }
 
 function _removeActive(tween: Tween): void {
-	const i = _activeTweens.indexOf(tween);
-	if (i !== -1) _activeTweens.splice(i, 1);
+	if (!_activeTweens.delete(tween) || _activeTweens.size !== 0) {
+		return;
+	}
+	_unregisterTicker();
 }
 
-// ── Object pool ───────────────────────────────────────────────────────────────
-
-const _pool: Tween[] = [];
-
+/**
+ * Ends one tween lifecycle. Completion is resolved before release listeners so
+ * observers always see a settled, inactive tween. This is the only path used
+ * by natural completion and explicit removal.
+ */
 function _releaseTween(tween: Tween): void {
 	const target = tween._target;
 	if (!target) {
 		return;
 	}
+
 	tween._target = undefined;
-	_decTweenCount(target);
+	_decrementTweenCount(target);
 	_removeActive(tween);
-	tween._notifyRelease();
 	tween._resolveAll();
-	tween._recycle();
-	_pool.push(tween);
+	tween._notifyRelease();
+	tween._dispose();
 }
 
-// ── Tween ─────────────────────────────────────────────────────────────────────
-
 /**
- * Egret-compatible tween engine with repeat, yoyo, and thenable completion.
+ * Tween engine with repeat, yoyo, and thenable completion.
+ *
+ * A Tween instance represents one animation lifecycle and is never reused for
+ * another target. Holding a completed instance is therefore safe: it can no
+ * longer control a subsequently created tween.
  */
 export class Tween {
-	// ── Static API ────────────────────────────────────────────────────────────
-
 	/**
 	 * Creates a Tween for a target.
 	 */
-	public static get(
-		target: object,
-		props?: TweenOptions & {
-			onChange?: (tween: Tween) => void;
-			onChangeObj?: object;
-			paused?: boolean;
-			position?: number;
-		},
-		override = false,
-	): Tween {
+	public static get(target: object, options?: TweenOptions, override = false): Tween {
 		if (override) {
 			Tween.removeTweens(target);
 		}
-		const tween = _pool.pop() ?? new Tween();
-		tween._init(target, props);
+
+		const tween = new Tween();
+		tween._initialize(target, options);
 		_addActive(tween);
-		_incTweenCount(target);
-
-		if (props?.position != null) {
-			tween._seekTo(props.position);
-		}
-
+		_incrementTweenCount(target);
 		return tween;
 	}
 
 	/**
-	 * Returns the number of unreleased tweens targeting an object.
+	 * Returns the number of active or paused tweens targeting an object.
 	 */
 	public static getCount(target: object): number {
 		return _getTweenCount(target);
 	}
 
 	/**
-	 * Remove and recycle all tweens targeting the given object.
+	 * Removes every tween targeting an object.
 	 */
 	public static removeTweens(target: object): void {
-		if (_getTweenCount(target) === 0) return;
-		for (let i = _activeTweens.length - 1; i >= 0; i--) {
-			if (_activeTweens[i]._target === target) {
-				_releaseTween(_activeTweens[i]);
+		for (const tween of [..._activeTweens]) {
+			if (tween._target === target) {
+				_releaseTween(tween);
 			}
 		}
 	}
 
 	/**
-	 * Pause all tweens targeting the given object.
+	 * Pauses every tween targeting an object.
 	 */
 	public static pauseTweens(target: object): void {
-		if (_getTweenCount(target) === 0) return;
 		for (const tween of _activeTweens) {
-			if (tween._target === target) tween.setPaused(true);
+			if (tween._target === target) {
+				tween.setPaused(true);
+			}
 		}
 	}
 
 	/**
-	 * Resume all tweens targeting the given object.
+	 * Resumes every tween targeting an object.
 	 */
 	public static resumeTweens(target: object): void {
-		if (_getTweenCount(target) === 0) return;
 		for (const tween of _activeTweens) {
-			if (tween._target === target) tween.setPaused(false);
+			if (tween._target === target) {
+				tween.setPaused(false);
+			}
 		}
 	}
 
 	/**
-	 * Remove and recycle all active tweens.
+	 * Removes every active tween.
 	 */
 	public static removeAllTweens(): void {
-		for (const tween of _activeTweens.slice()) {
+		for (const tween of [..._activeTweens]) {
 			_releaseTween(tween);
 		}
 	}
 
 	/**
-	 * Pause all active tweens globally.
+	 * Pauses all tweens except those configured to ignore global pause.
 	 */
 	public static pauseAll(): void {
 		_globalPaused = true;
 	}
 
 	/**
-	 * Resume all tweens from global pause.
+	 * Resumes globally paused tweens.
 	 */
 	public static resumeAll(): void {
 		_globalPaused = false;
 	}
 
-	// ── Instance fields ───────────────────────────────────────────────────────
-
+	/** The target also acts as the lifecycle marker: undefined means released. */
 	_target?: object;
+	/** Ordered step queue for the initial forward pass. */
 	private _steps: TweenStep[] = [];
+	/** Position inside the current pass, independent of the canonical step order. */
 	private _stepIndex = 0;
 	private _stepElapsed = 0;
-	private _generation = 0;
+	/** Avoids scanning the complete step queue on every frame. */
+	private _hasTimedSteps = false;
+	/** Defers options.position until chained steps have been appended. */
+	private _pendingPosition?: number;
 	private _paused = false;
+	/** Additional passes remaining; -1 means infinite repetition. */
 	private _repeatsLeft = 0;
 	private _yoyo = false;
+	/** True while a yoyo cycle traverses the same steps in reverse order. */
 	private _reversed = false;
 	private _ignoreGlobalPause = false;
 	private _defaultEase: EaseFunction = Ease.linear;
@@ -249,10 +235,17 @@ export class Tween {
 	private _releaseListeners: Array<() => void> = [];
 	private _isCompleted = false;
 
-	// ── Instance API ──────────────────────────────────────────────────────────
+	/**
+	 * Whether the tween has not yet completed or been removed.
+	 */
+	public get isActive(): boolean {
+		return this._target !== undefined;
+	}
 
 	/**
-	 * Resolves when the tween completes or is removed.
+	 * Resolves with `undefined` when the tween completes or is removed.
+	 * Completion never rejects; cancellation and natural completion share the
+	 * same terminal state.
 	 */
 	public then<TResult1 = void, TResult2 = never>(
 		onfulfilled?: ((value: void) => TResult1 | PromiseLike<TResult1>) | undefined | null,
@@ -267,42 +260,51 @@ export class Tween {
 		}).then(onfulfilled, onrejected);
 	}
 
+	/**
+	 * Registers cleanup used by TweenGroup. Listeners added after completion run
+	 * immediately, so callers never retain an already inactive tween.
+	 * @internal
+	 */
 	public _addReleaseListener(listener: () => void): void {
+		if (this._isCompleted) {
+			listener();
+			return;
+		}
 		this._releaseListeners.push(listener);
 	}
 
 	/**
-	 * Animate target properties to the given values over `duration` ms.
+	 * Adds a property interpolation step. Start values are sampled on first use
+	 * and then retained, keeping repeat and yoyo cycles continuous.
 	 */
 	public to(props: Record<string, number>, duration: number, ease?: EaseFunction): this {
-		this._steps.push({
-			type: 'to',
-			props,
-			duration,
-			ease: ease ?? this._defaultEase,
-		});
+		const stepDuration = _validateDuration(duration);
+		this._steps.push({ type: 'to', props, duration: stepDuration, ease: ease ?? this._defaultEase });
+		this._hasTimedSteps ||= stepDuration > 0;
 		return this;
 	}
 
 	/**
-	 * Animate target properties from the given values to their current values.
+	 * Adds an interpolation from explicit values to the target's initial values.
+	 * The original end values are captured once and reused by later cycles.
 	 */
 	public from(props: Record<string, number>, duration: number, ease?: EaseFunction): this {
-		this._steps.push({
-			type: 'from',
-			props,
-			duration,
-			ease: ease ?? this._defaultEase,
-		});
+		const stepDuration = _validateDuration(duration);
+		this._steps.push({ type: 'from', props, duration: stepDuration, ease: ease ?? this._defaultEase });
+		this._hasTimedSteps ||= stepDuration > 0;
 		return this;
 	}
 
 	/**
 	 * Adds a delay to the sequence.
 	 */
-	public wait(duration: number, _passive?: boolean): this {
-		if (duration <= 0) return this;
-		this._steps.push({ type: 'wait', duration });
+	public wait(duration: number): this {
+		const stepDuration = _validateDuration(duration);
+		if (stepDuration === 0) {
+			return this;
+		}
+		this._steps.push({ type: 'wait', duration: stepDuration });
+		this._hasTimedSteps = true;
 		return this;
 	}
 
@@ -326,67 +328,80 @@ export class Tween {
 	 * Pauses or resumes the tween.
 	 */
 	public setPaused(value: boolean): this {
-		if (this._paused === value) return this;
 		this._paused = value;
 		return this;
 	}
 
 	/**
-	 * Pause this tween immediately.
+	 * Pauses the tween.
 	 */
 	public pause(): void {
 		this.setPaused(true);
 	}
 
 	/**
-	 * Resume this tween immediately.
+	 * Resumes the tween.
 	 */
 	public resume(): void {
 		this.setPaused(false);
 	}
 
 	/**
-	 * Removes and recycles the tween.
+	 * Removes the tween.
 	 */
 	public remove(): void {
 		_releaseTween(this);
 	}
 
 	/**
-	 * Moves the sequence to an absolute position.
+	 * Moves the sequence to an absolute position in its initial forward pass.
+	 * Seeking applies prior interpolations and `set` steps, but deliberately
+	 * skips `call` steps to avoid replaying arbitrary side effects.
 	 */
-	public setPosition(value: number, _actionsMode = 1): void {
-		this._seekTo(Math.max(0, value));
+	public setPosition(value: number): void {
+		if (!this._target) {
+			return;
+		}
+		this._pendingPosition = undefined;
+		this._seekTo(_validatePosition(value));
+		if (this._stepIndex >= this._steps.length) {
+			_releaseTween(this);
+		}
 	}
 
-	// ── Internal ──────────────────────────────────────────────────────────────
+	/**
+	 * Advances the current cycle. Unconsumed time carries into later steps and
+	 * later repeat cycles, so one large frame delta still produces the correct
+	 * final state.
+	 * @internal
+	 */
+	public _tick(deltaTime: number): void {
+		if (this._paused || (!this._ignoreGlobalPause && _globalPaused) || !this._target) {
+			return;
+		}
 
-	public _tick(dt: number): void {
-		if (this._paused) return;
-		if (!this._ignoreGlobalPause && _globalPaused) return;
-		if (!this._target) return;
+		if (this._pendingPosition !== undefined) {
+			const position = this._pendingPosition;
+			this._pendingPosition = undefined;
+			this._seekTo(position);
+		}
 		if (this._stepIndex >= this._steps.length) {
 			_releaseTween(this);
 			return;
 		}
 
-		const generation = this._generation;
-		const hasTimedSteps = this._steps.some(step => step.duration > 0);
-		let remaining = Math.max(0, dt);
-
+		let remaining = Math.max(0, deltaTime);
 		do {
 			while (remaining > 0 && this._stepIndex < this._steps.length) {
 				const step = this._steps[this._canonicalStepIndex(this._stepIndex)];
-
 				if (step.duration === 0) {
 					this._advanceInstantSteps();
 					continue;
 				}
 
 				if (this._stepElapsed === 0) {
-					this._initStep(step);
+					this._initializeStep(step);
 				}
-
 				this._stepElapsed += remaining;
 				if (this._stepElapsed >= step.duration) {
 					remaining = this._stepElapsed - step.duration;
@@ -394,8 +409,10 @@ export class Tween {
 					this._applyStep(step, this._reversed ? 0 : 1);
 					this._stepIndex++;
 				} else {
-					const t = this._stepElapsed / step.duration;
-					this._applyStep(step, this._reversed ? 1 - t : t);
+					this._applyStep(
+						step,
+						this._reversed ? 1 - this._stepElapsed / step.duration : this._stepElapsed / step.duration,
+					);
 					remaining = 0;
 				}
 			}
@@ -404,12 +421,9 @@ export class Tween {
 			if (this._stepIndex < this._steps.length) {
 				break;
 			}
-
 			if (this._repeatsLeft === 0) {
-				if (this._onChange) {
-					this._onChange.call(this._onChangeObj ?? this._target, this);
-				}
-				if (this._generation !== generation || !this._target) {
+				this._notifyChange();
+				if (!this._target) {
 					return;
 				}
 				_releaseTween(this);
@@ -417,29 +431,48 @@ export class Tween {
 			}
 
 			this._startNextCycle();
-			if (this._generation !== generation || !this._target) {
+			if (!this._target) {
 				return;
 			}
-			if (!hasTimedSteps && this._repeatsLeft === -1) {
+			if (!this._hasTimedSteps && this._repeatsLeft === -1) {
 				break;
 			}
-		} while (remaining > 0 || (!hasTimedSteps && this._repeatsLeft !== -1));
+		} while (remaining > 0 || (!this._hasTimedSteps && this._repeatsLeft !== -1));
 
-		if (this._onChange) {
-			this._onChange.call(this._onChangeObj ?? this._target, this);
-		}
+		this._notifyChange();
 	}
 
-	// ── Private ───────────────────────────────────────────────────────────────
+	private _initialize(target: object, options?: TweenOptions): void {
+		this._target = target;
+		this._steps = [];
+		this._stepIndex = 0;
+		this._stepElapsed = 0;
+		this._hasTimedSteps = false;
+		this._pendingPosition = options?.position === undefined ? undefined : _validatePosition(options.position);
+		this._paused = options?.paused ?? false;
+		this._repeatsLeft = _normalizeRepeat(options?.repeat, options?.loop);
+		this._yoyo = options?.yoyo ?? false;
+		this._reversed = false;
+		this._ignoreGlobalPause = options?.ignoreGlobalPause ?? false;
+		this._defaultEase = options?.ease ?? Ease.linear;
+		this._onChange = options?.onChange;
+		this._onChangeObj = options?.onChangeObj;
+		this._onLoopComplete = options?.onLoopComplete;
+		this._onLoopCompleteObj = options?.onLoopCompleteObj;
+	}
 
+	/**
+	 * Runs consecutive zero-duration steps. Property steps are reversible;
+	 * callbacks and setters run only forward because they have no generic undo.
+	 */
 	private _advanceInstantSteps(): void {
-		while (
-			this._stepIndex < this._steps.length &&
-			this._steps[this._canonicalStepIndex(this._stepIndex)].duration === 0
-		) {
+		while (this._stepIndex < this._steps.length) {
 			const step = this._steps[this._canonicalStepIndex(this._stepIndex)];
+			if (step.duration !== 0) {
+				return;
+			}
 			if (step.type === 'to' || step.type === 'from') {
-				this._initStep(step);
+				this._initializeStep(step);
 				this._applyStep(step, this._reversed ? 0 : 1);
 			} else if (!this._reversed) {
 				this._executeInstantStep(step);
@@ -448,23 +481,33 @@ export class Tween {
 		}
 	}
 
+	/**
+	 * Starts the next repeat cycle and flips traversal direction for yoyo.
+	 */
 	private _startNextCycle(): void {
 		if (this._repeatsLeft > 0) {
 			this._repeatsLeft--;
 		}
 		this._stepIndex = 0;
 		this._stepElapsed = 0;
-		if (this._yoyo) {
-			this._reversed = !this._reversed;
-		}
+		this._reversed = this._yoyo ? !this._reversed : false;
 		if (this._onLoopComplete) {
 			this._onLoopComplete.call(this._onLoopCompleteObj ?? this._target, this);
 		}
 	}
 
-	private _initStep(step: TweenStep): void {
-		if (step.type === 'to' && step.startValues) return;
-		if (step.type === 'from' && step.endValues) return;
+	/**
+	 * Captures endpoints lazily. A captured endpoint is never overwritten so a
+	 * repeat or yoyo pass retraces the same animation instead of sampling a
+	 * mutated target value.
+	 */
+	private _initializeStep(step: TweenStep): void {
+		if (step.type === 'to' && step.startValues) {
+			return;
+		}
+		if (step.type === 'from' && step.endValues) {
+			return;
+		}
 
 		const target = this._target as Record<string, unknown>;
 		if (step.type === 'to') {
@@ -481,57 +524,88 @@ export class Tween {
 		}
 	}
 
-	private _canonicalStepIndex(i: number): number {
-		return this._reversed ? this._steps.length - 1 - i : i;
+	/** Maps the current traversal index to the original step order for yoyo. */
+	private _canonicalStepIndex(index: number): number {
+		return this._reversed ? this._steps.length - 1 - index : index;
 	}
 
-	private _applyStep(step: TweenStep, rawT: number): void {
+	private _applyStep(step: TweenStep, progress: number): void {
 		const target = this._target as Record<string, unknown>;
 		if (step.type === 'to') {
-			const t = step.ease(rawT);
+			const easedProgress = step.ease(progress);
 			const start = step.startValues!;
 			for (const key of Object.keys(step.props)) {
-				target[key] = start[key] + (step.props[key] - start[key]) * t;
+				target[key] = start[key] + (step.props[key] - start[key]) * easedProgress;
 			}
 		} else if (step.type === 'from') {
-			const t = step.ease(rawT);
+			const easedProgress = step.ease(progress);
 			const end = step.endValues!;
 			for (const key of Object.keys(step.props)) {
-				target[key] = step.props[key] + (end[key] - step.props[key]) * t;
+				target[key] = step.props[key] + (end[key] - step.props[key]) * easedProgress;
 			}
 		}
 	}
 
 	private _executeInstantStep(step: TweenStep): void {
-		const target = this._target as Record<string, unknown>;
 		if (step.type === 'call') {
-			step.fn.apply(step.thisObj ?? target, step.params);
+			step.fn.apply(step.thisObj ?? this._target, step.params);
 		} else if (step.type === 'set') {
-			for (const key of Object.keys(step.props)) {
-				target[key] = step.props[key];
-			}
+			this._applySetStep(step);
 		}
 	}
 
-	private _seekTo(positionMs: number): void {
-		let remaining = positionMs;
+	private _applySetStep(step: SetStep): void {
+		const target = this._target as Record<string, unknown>;
+		for (const key of Object.keys(step.props)) {
+			target[key] = step.props[key];
+		}
+	}
+
+	/**
+	 * Rebuilds target state from the start of the forward sequence. Calls are
+	 * skipped, while `set` is applied because later interpolation may depend on
+	 * its resulting target state.
+	 */
+	private _seekTo(position: number): void {
 		this._stepIndex = 0;
 		this._stepElapsed = 0;
-		for (let i = 0; i < this._steps.length; i++) {
-			const step = this._steps[i];
-			if (step.duration === 0) continue;
-			if (remaining <= step.duration) {
-				this._stepIndex = i;
-				this._stepElapsed = remaining;
-				this._initStep(step);
-				this._applyStep(step, remaining / step.duration);
-				return;
+		this._reversed = false;
+		let remaining = position;
+
+		while (this._stepIndex < this._steps.length) {
+			const step = this._steps[this._stepIndex];
+			if (step.duration === 0) {
+				if (step.type === 'to' || step.type === 'from') {
+					this._initializeStep(step);
+					this._applyStep(step, 1);
+				} else if (step.type === 'set') {
+					this._applySetStep(step);
+				}
+				this._stepIndex++;
+				continue;
 			}
-			remaining -= step.duration;
+
+			this._initializeStep(step);
+			if (remaining >= step.duration) {
+				this._applyStep(step, 1);
+				remaining -= step.duration;
+				this._stepIndex++;
+				continue;
+			}
+
+			this._stepElapsed = remaining;
+			this._applyStep(step, remaining / step.duration);
+			return;
 		}
-		this._stepIndex = this._steps.length;
 	}
 
+	private _notifyChange(): void {
+		if (this._onChange) {
+			this._onChange.call(this._onChangeObj ?? this._target, this);
+		}
+	}
+
+	/** @internal Notifies owners after the tween becomes inactive. */
 	public _notifyRelease(): void {
 		const listeners = this._releaseListeners;
 		this._releaseListeners = [];
@@ -540,50 +614,27 @@ export class Tween {
 		}
 	}
 
-	_resolveAll(): void {
+	/** @internal Settles every pending thenable subscription exactly once. */
+	public _resolveAll(): void {
 		this._isCompleted = true;
-		if (this._resolvers.length === 0) return;
 		const resolvers = this._resolvers;
 		this._resolvers = [];
-		for (const resolve of resolvers) resolve();
+		for (const resolve of resolvers) {
+			resolve();
+		}
 	}
 
-	_recycle(): void {
-		this._target = undefined;
+	/** @internal Drops queued steps and callbacks after a terminal transition. */
+	public _dispose(): void {
 		this._steps = [];
 		this._stepIndex = 0;
 		this._stepElapsed = 0;
-		this._paused = false;
-		this._repeatsLeft = 0;
-		this._yoyo = false;
-		this._reversed = false;
+		this._hasTimedSteps = false;
+		this._pendingPosition = undefined;
 		this._onChange = undefined;
 		this._onChangeObj = undefined;
 		this._onLoopComplete = undefined;
 		this._onLoopCompleteObj = undefined;
-		this._resolvers = [];
 		this._releaseListeners = [];
-	}
-
-	private _init(
-		target: object,
-		options?: TweenOptions & { onChange?: (tween: Tween) => void; onChangeObj?: object },
-	): void {
-		this._target = target;
-		this._generation++;
-		this._steps = [];
-		this._stepIndex = 0;
-		this._stepElapsed = 0;
-		this._isCompleted = false;
-		this._paused = options?.paused ?? false;
-		this._repeatsLeft = _normalizeRepeat(options?.repeat, options?.loop);
-		this._yoyo = options?.yoyo ?? false;
-		this._reversed = false;
-		this._ignoreGlobalPause = options?.ignoreGlobalPause ?? false;
-		this._defaultEase = options?.ease ?? Ease.linear;
-		this._onChange = options?.onChange;
-		this._onChangeObj = options?.onChangeObj;
-		this._onLoopComplete = options?.onLoopComplete;
-		this._onLoopCompleteObj = options?.onLoopCompleteObj;
 	}
 }

@@ -42,20 +42,19 @@ describe('TweenGroup', () => {
 		expect(target.x).toBe(0);
 	});
 
-	it('removeAll() returns tweens to the pool for reuse', () => {
+	it('removeAll() releases its tween instances', () => {
 		const target = { x: 0 };
 		const group = new TweenGroup('test');
 		const removed = group.get(target).to({ x: 100 }, 500);
 
 		group.removeAll();
 
-		const reused = Tween.get({ y: 0 });
-		expect(reused).toBe(removed);
+		expect(removed.isActive).toBe(false);
 	});
 });
 
 describe('TweenGroup lifecycle safety', () => {
-	it('removes naturally completed members before a pooled instance is reused', () => {
+	it('removes naturally completed members without affecting later tweens', () => {
 		const completedTarget = { x: 0 };
 		const replacementTarget = { x: 0 };
 		const group = new TweenGroup('test');
@@ -65,10 +64,21 @@ describe('TweenGroup lifecycle safety', () => {
 		expect(group.size).toBe(0);
 
 		const replacement = Tween.get(replacementTarget).to({ x: 100 }, 100);
-		expect(replacement).toBe(completed);
-
 		group.removeAll();
+
+		expect(replacement).not.toBe(completed);
 		expect(Tween.getCount(replacementTarget)).toBe(1);
 		replacement.remove();
+	});
+
+	it('does not track an inactive tween added after completion', () => {
+		const target = { x: 0 };
+		const group = new TweenGroup('test');
+		const tween = Tween.get(target).to({ x: 100 }, 100);
+
+		tween.remove();
+		group.add(tween);
+
+		expect(group.size).toBe(0);
 	});
 });

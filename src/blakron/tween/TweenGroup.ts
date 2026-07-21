@@ -2,33 +2,26 @@ import { Tween } from './Tween.js';
 import type { TweenOptions } from './types.js';
 
 /**
- * Manages a named collection of Tween instances.
+ * Owns a named collection of active tweens for bulk lifecycle operations.
+ * Members automatically unregister when they complete or are removed.
  */
 export class TweenGroup {
-	// ── Instance fields ───────────────────────────────────────────────────────
-
 	public readonly name: string;
 	private _tweens: Tween[] = [];
-
-	// ── Constructor ───────────────────────────────────────────────────────────
 
 	public constructor(name = '') {
 		this.name = name;
 	}
 
-	// ── Getters / Setters ─────────────────────────────────────────────────────
-
 	/**
-	 * Returns the number of tracked tweens.
+	 * Returns the number of currently active tweens in this group.
 	 */
 	public get size(): number {
 		return this._tweens.length;
 	}
 
-	// ── Public methods ────────────────────────────────────────────────────────
-
 	/**
-	 * Creates and tracks a Tween.
+	 * Creates a Tween and begins tracking its lifecycle.
 	 */
 	public get(target: object, options?: TweenOptions): Tween {
 		const tween = Tween.get(target, options);
@@ -37,14 +30,15 @@ export class TweenGroup {
 	}
 
 	/**
-	 * Tracks an existing Tween.
+	 * Tracks an existing active Tween. Inactive tweens are ignored because they
+	 * have no lifecycle left for this group to control.
 	 */
 	public add(tween: Tween): void {
 		this._track(tween);
 	}
 
 	/**
-	 * Pauses every tracked Tween.
+	 * Pauses every currently tracked Tween.
 	 */
 	public pause(): void {
 		for (const tween of this._tweens) {
@@ -53,7 +47,7 @@ export class TweenGroup {
 	}
 
 	/**
-	 * Resumes every tracked Tween.
+	 * Resumes every currently tracked Tween.
 	 */
 	public resume(): void {
 		for (const tween of this._tweens) {
@@ -62,7 +56,7 @@ export class TweenGroup {
 	}
 
 	/**
-	 * Removes every tracked Tween.
+	 * Removes every tracked Tween and clears the group.
 	 */
 	public removeAll(): void {
 		for (const tween of this._tweens.slice()) {
@@ -71,10 +65,8 @@ export class TweenGroup {
 		this._tweens = [];
 	}
 
-	// ── Private methods ───────────────────────────────────────────────────────
-
 	private _track(tween: Tween): void {
-		if (this._tweens.includes(tween)) {
+		if (!tween.isActive || this._tweens.includes(tween)) {
 			return;
 		}
 		this._tweens.push(tween);

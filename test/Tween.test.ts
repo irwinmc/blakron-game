@@ -1,50 +1,52 @@
 import { describe, it, expect } from 'vitest';
 import { Tween } from '../src/blakron/tween/Tween.js';
+import { Ease } from '../src/blakron/tween/Ease.js';
 
 describe('Tween', () => {
-	it('remove() detaches the tween and returns it to the pool', () => {
+	it('remove() detaches the tween', () => {
 		const target = { x: 0 };
 		const tween = Tween.get(target).to({ x: 100 }, 100);
 
 		tween.remove();
-
 		tween._tick(50);
+
 		expect(target.x).toBe(0);
 		expect(Tween.getCount(target)).toBe(0);
-
-		const reused = Tween.get({ y: 0 });
-		expect(reused).toBe(tween);
+		expect(tween.isActive).toBe(false);
 	});
 
-	it('removeTweens() returns the removed tween to the pool', () => {
+	it('removeTweens() detaches all tweens targeting an object', () => {
 		const target = { x: 0 };
 		const tween = Tween.get(target).to({ x: 100 }, 100);
 
 		Tween.removeTweens(target);
 
-		const reused = Tween.get({ y: 0 });
-		expect(reused).toBe(tween);
+		expect(Tween.getCount(target)).toBe(0);
+		expect(tween.isActive).toBe(false);
 	});
 
-	it('removeAllTweens() returns every removed tween to the pool', () => {
-		const a = Tween.get({ x: 0 }).to({ x: 100 }, 100);
-		const b = Tween.get({ x: 0 }).to({ x: 100 }, 100);
+	it('removeAllTweens() detaches every active tween', () => {
+		const targetA = { x: 0 };
+		const targetB = { x: 0 };
+		const a = Tween.get(targetA).to({ x: 100 }, 100);
+		const b = Tween.get(targetB).to({ x: 100 }, 100);
 
 		Tween.removeAllTweens();
 
-		const reusedFirst = Tween.get({ y: 0 });
-		const reusedSecond = Tween.get({ y: 0 });
-		expect([reusedFirst, reusedSecond]).toEqual(expect.arrayContaining([a, b]));
+		expect(Tween.getCount(targetA)).toBe(0);
+		expect(Tween.getCount(targetB)).toBe(0);
+		expect(a.isActive).toBe(false);
+		expect(b.isActive).toBe(false);
 	});
 
-	it('a tween that completes naturally is still returned to the pool', () => {
+	it('marks a naturally completed tween as inactive', () => {
 		const target = { x: 0 };
 		const tween = Tween.get(target).to({ x: 100 }, 100);
 
 		tween._tick(100);
 
-		const reused = Tween.get({ y: 0 });
-		expect(reused).toBe(tween);
+		expect(target.x).toBe(100);
+		expect(tween.isActive).toBe(false);
 	});
 
 	it('getCount() tracks active tweens per target without touching the target object', () => {
@@ -350,5 +352,80 @@ describe('Tween as a thenable', () => {
 		tween._tick(100);
 
 		await expect(done).resolves.toBeUndefined();
+	});
+});
+
+describe('Tween safety and seeking', () => {
+	it('does not let an old reference remove a newer tween', () => {
+		const oldTarget = { x: 0 };
+		const newTarget = { x: 0 };
+		const oldTween = Tween.get(oldTarget).to({ x: 100 }, 100);
+
+		oldTween.remove();
+		const newTween = Tween.get(newTarget).to({ x: 100 }, 100);
+		oldTween.remove();
+
+		expect(newTween).not.toBe(oldTween);
+		expect(newTween.isActive).toBe(true);
+		expect(Tween.getCount(newTarget)).toBe(1);
+		newTween._tick(100);
+		expect(newTarget.x).toBe(100);
+	});
+
+	it('applies every preceding step when seeking into a sequence', () => {
+		const target = { x: 0, visible: true };
+		const tween = Tween.get(target).to({ x: 100 }, 100).set({ visible: false }).to({ x: 200 }, 100);
+
+		tween.setPosition(150);
+
+		expect(target.x).toBe(150);
+		expect(target.visible).toBe(false);
+		tween.remove();
+	});
+
+	it('does not execute callback steps while seeking', () => {
+		const target = { x: 0 };
+		let calls = 0;
+		const tween = Tween.get(target)
+			.to({ x: 100 }, 100)
+			.call(() => calls++)
+			.to({ x: 200 }, 100);
+
+		tween.setPosition(150);
+
+		expect(target.x).toBe(150);
+		expect(calls).toBe(0);
+		tween.remove();
+	});
+
+	it('applies an initial position after chained steps are added', () => {
+		const target = { x: 0 };
+		const tween = Tween.get(target, { position: 150 }).to({ x: 100 }, 100).to({ x: 200 }, 100);
+
+		tween._tick(0);
+
+		expect(target.x).toBe(150);
+		tween.remove();
+	});
+
+	it('rejects invalid durations and positions', () => {
+		const target = { x: 0 };
+		const tween = Tween.get(target);
+
+		expect(() => tween.to({ x: 100 }, Number.NaN)).toThrow(RangeError);
+		expect(() => tween.from({ x: 100 }, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+		expect(() => tween.wait(-1)).toThrow(RangeError);
+		expect(() => tween.setPosition(Number.NaN)).toThrow(RangeError);
+		tween.remove();
+	});
+});
+
+describe('Ease', () => {
+	it('keeps the linear cubic bezier curve linear', () => {
+		const ease = Ease.cubicBezier(0, 0, 1, 1);
+
+		expect(ease(0.1)).toBeCloseTo(0.1, 6);
+		expect(ease(0.5)).toBeCloseTo(0.5, 6);
+		expect(ease(0.9)).toBeCloseTo(0.9, 6);
 	});
 });
