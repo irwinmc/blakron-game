@@ -1,6 +1,10 @@
 /**
  * URLVariables allows transferring variables between an application and a server.
- * Use with URLRequest.data for POST requests.
+ *
+ * Assign an instance to `URLRequest.data`: for GET requests it's appended to
+ * the URL's query string, for POST requests it's sent as
+ * `application/x-www-form-urlencoded` (via `toString()`). `URLLoader` handles
+ * both cases automatically.
  *
  * Egret-compatible: egret.URLVariables
  */

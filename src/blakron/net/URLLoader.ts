@@ -11,6 +11,8 @@ import {
 } from '@blakron/core';
 import type { URLRequest } from './URLRequest.js';
 import { URLLoaderDataFormat } from './URLLoaderDataFormat.js';
+import { URLRequestMethod } from './URLRequestMethod.js';
+import { URLVariables } from './URLVariables.js';
 
 /**
  * High-level resource loader, Egret-compatible.
@@ -56,6 +58,7 @@ export class URLLoader extends EventDispatcher {
 	 */
 	public load(request: URLRequest): void {
 		this.close();
+		this.data = undefined;
 
 		switch (this.dataFormat) {
 			case URLLoaderDataFormat.TEXTURE:
@@ -81,6 +84,7 @@ export class URLLoader extends EventDispatcher {
 		if (this._imageLoader) {
 			this._imageLoader.removeEventListener(Event.COMPLETE, this._handleImageComplete);
 			this._imageLoader.removeEventListener(IOErrorEvent.IO_ERROR, this._handleError);
+			this._imageLoader.close();
 			this._imageLoader = undefined;
 		}
 		if (this._sound) {
@@ -103,13 +107,39 @@ export class URLLoader extends EventDispatcher {
 		xhr.addEventListener(IOErrorEvent.IO_ERROR, this._handleError);
 		xhr.addEventListener(ProgressEvent.PROGRESS, this._handleProgress);
 
-		xhr.open(request.url, request.method as Parameters<HttpRequest['open']>[1]);
+		const isGet = request.method !== URLRequestMethod.POST;
+		const url =
+			isGet && request.data instanceof URLVariables
+				? this._appendQueryString(request.url, request.data)
+				: request.url;
+
+		xhr.open(url, request.method as Parameters<HttpRequest['open']>[1]);
+
+		let sendData: string | ArrayBuffer | undefined;
+		if (isGet) {
+			// URLVariables on a GET request is encoded into the URL above, not sent as a body.
+			sendData = request.data instanceof URLVariables ? undefined : request.data;
+		} else if (request.data instanceof URLVariables) {
+			const hasContentType = request.requestHeaders.some(h => h.name.toLowerCase() === 'content-type');
+			if (!hasContentType) {
+				xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+			}
+			sendData = request.data.toString();
+		} else {
+			sendData = request.data;
+		}
 
 		for (const header of request.requestHeaders) {
 			xhr.setRequestHeader(header.name, header.value);
 		}
 
-		xhr.send(request.data ?? undefined);
+		xhr.send(sendData);
+	}
+
+	private _appendQueryString(url: string, variables: URLVariables): string {
+		const query = variables.toString();
+		if (!query) return url;
+		return url + (url.includes('?') ? '&' : '?') + query;
 	}
 
 	private _loadTexture(request: URLRequest): void {

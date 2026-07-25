@@ -1,5 +1,6 @@
 import type { URLRequestHeader } from './URLRequestHeader.js';
 import { URLRequestMethod } from './URLRequestMethod.js';
+import type { URLVariables } from './URLVariables.js';
 
 /**
  * Captures all information in a single HTTP request, Egret-compatible.
@@ -26,9 +27,14 @@ export class URLRequest {
 	public method: string = URLRequestMethod.GET;
 
 	/**
-	 * Request body data for POST requests.
+	 * Request body data.
+	 *
+	 * Passing a `URLVariables` instance sends it as
+	 * `application/x-www-form-urlencoded` (via `toString()`) for POST requests,
+	 * and appends it to the URL's query string for GET requests, unless a
+	 * `Content-Type` header is already present in `requestHeaders`.
 	 */
-	public data: string | ArrayBuffer | undefined;
+	public data: string | ArrayBuffer | URLVariables | undefined;
 
 	/**
 	 * Additional HTTP request headers.
