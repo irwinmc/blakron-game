@@ -1,8 +1,8 @@
 {
 	"name": "@blakron/game",
-	"version": "0.3.4",
+	"version": "1.0.0",
 	"description": "Game extensions for the Blakron engine — Tween, Ease, MovieClip, ScrollView, URLLoader",
-	"author": "",
+	"author": "Kelvin <kyia.x52@gmail.com>",
 	"license": "MIT",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -11,8 +11,7 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js",
-			"require": "./dist/index.js"
+			"import": "./dist/index.js"
 		}
 	},
 	"files": [
@@ -22,6 +21,7 @@
 		"build": "tsc --build",
 		"dev": "tsc --watch",
 		"clean": "rm -rf dist",
+		"prepublishOnly": "npm run clean && npm run build",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},

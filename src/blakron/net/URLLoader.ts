@@ -78,6 +78,9 @@ export class URLLoader extends EventDispatcher {
 	 */
 	public close(): void {
 		if (this._xhr) {
+			this._xhr.removeEventListener(Event.COMPLETE, this._handleXhrComplete);
+			this._xhr.removeEventListener(IOErrorEvent.IO_ERROR, this._handleError);
+			this._xhr.removeEventListener(ProgressEvent.PROGRESS, this._handleProgress);
 			this._xhr.abort();
 			this._xhr = undefined;
 		}

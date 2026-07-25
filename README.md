@@ -1,14 +1,18 @@
 # @blakron/game
 
-Game extensions for [Blakron](https://github.com/irwinmc/blakron): chainable Tween animation, externally scheduled MovieClip playback, and common UI/network helpers.
+Game extensions for [@blakron/core](https://github.com/irwinmc/blakron-core): chainable Tween animation, externally scheduled MovieClip playback, and common UI/network helpers.
+
+> **Stable (1.0.0).** Requires `@blakron/core@^1.0.1`. Targets ES2022 + evergreen browsers, same as core.
 
 ## Installation
 
 ```bash
-pnpm add @blakron/game
+pnpm add @blakron/game @blakron/core
 ```
 
-Use a compatible `@blakron/core` version in the same project.
+`@blakron/game` declares `@blakron/core` as a regular dependency, so it is installed automatically; listing it explicitly is recommended so you control the resolved core version.
+
+For the full list of changes in this release, see [CHANGELOG.md](./CHANGELOG.md).
 
 ## Tween
 
