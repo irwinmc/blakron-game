@@ -8,11 +8,18 @@ import {
 	ImageLoader,
 	Texture,
 	Sound,
+	type EventMap,
 } from '@blakron/core';
 import type { URLRequest } from './URLRequest.js';
 import { URLLoaderDataFormat } from './URLLoaderDataFormat.js';
 import { URLRequestMethod } from './URLRequestMethod.js';
 import { URLVariables } from './URLVariables.js';
+
+export interface URLLoaderEvents extends EventMap {
+	[Event.COMPLETE]: Event;
+	[IOErrorEvent.IO_ERROR]: IOErrorEvent;
+	[ProgressEvent.PROGRESS]: ProgressEvent;
+}
 
 /**
  * High-level resource loader, Egret-compatible.
@@ -29,7 +36,7 @@ import { URLVariables } from './URLVariables.js';
  * loader.load(new URLRequest('data/config.json'));
  * ```
  */
-export class URLLoader extends EventDispatcher {
+export class URLLoader extends EventDispatcher<URLLoaderEvents> {
 	// ── Instance fields ───────────────────────────────────────────────────────
 
 	public dataFormat: URLLoaderDataFormat = URLLoaderDataFormat.TEXT;
@@ -209,9 +216,8 @@ export class URLLoader extends EventDispatcher {
 		this._dispatchError();
 	};
 
-	private _handleProgress = (e: Event): void => {
-		const pe = e as ProgressEvent;
-		ProgressEvent.dispatchProgressEvent(this, ProgressEvent.PROGRESS, pe.bytesLoaded, pe.bytesTotal);
+	private _handleProgress = (e: ProgressEvent): void => {
+		ProgressEvent.dispatchProgressEvent(this, ProgressEvent.PROGRESS, e.bytesLoaded, e.bytesTotal);
 	};
 
 	private _dispatchError(): void {

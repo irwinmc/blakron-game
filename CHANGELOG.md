@@ -4,6 +4,25 @@ All notable changes to `@blakron/game` are documented here.
 
 ---
 
+## [1.0.1] — 2026-07-27
+
+Type-safe event listeners, mirroring the `EventMap` work shipped in `@blakron/core` 1.0.2. The game package's own event sources now declare typed event maps so listeners receive the concrete `Event` subclass without manual `as` casts. No public API shape changes — existing `(e: Event) => void` callers keep working via the inherited fallback overload.
+
+### Added
+
+- **URLLoader**: `URLLoaderEvents` interface mapping `Event.COMPLETE → Event`, `IOErrorEvent.IO_ERROR → IOErrorEvent`, `ProgressEvent.PROGRESS → ProgressEvent`. `URLLoader` is now `extends EventDispatcher<URLLoaderEvents>`, so `loader.addEventListener(ProgressEvent.PROGRESS, e => e.bytesLoaded)` infers `e` as `ProgressEvent`.
+
+### Changed
+
+- **ScrollView**: the three private touch handlers (`_handleTouchBegin` / `_handleTouchMove` / `_handleTouchEnd`) now take `(e: TouchEvent)` directly instead of `(e: Event) + const touch = e as TouchEvent`. `ScrollView` inherits `DisplayObjectEvents` from core's `DisplayObject` (via `Sprite`), which already maps `TOUCH_BEGIN/MOVE/END/CANCEL → TouchEvent`, so the cast removal is a pure type-level win — no runtime change. This clears the last `as XxxEvent` cast in the game package.
+- **URLLoader**: `_handleProgress` now takes `(e: ProgressEvent)` directly; the `e as ProgressEvent` cast is gone.
+
+### Build
+
+- **package.json**: Bumped `@blakron/core` dependency from `^1.0.1` to `^1.0.3`. Required because the typed event maps (`DisplayObjectEvents`, `EventMap` generic on `EventDispatcher`) were introduced in core 1.0.2, and core 1.0.3 carries the `TextField` width/height getter fix.
+
+---
+
 ## [1.0.0] — 2026-07-26
 
 First stable release. From this version forward the public API surface (exports from `src/index.ts`) is committed to backward-compatible evolution per semver. This release aligns `@blakron/game` with `@blakron/core` 1.0 and locks the core peer dependency to `^1.0.1`.

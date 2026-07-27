@@ -272,15 +272,14 @@ export class ScrollView extends Sprite {
 
 	// ── Private methods ───────────────────────────────────────────────────────
 
-	private _handleTouchBegin = (e: Event): void => {
-		const touch = e as TouchEvent;
+	private _handleTouchBegin = (e: TouchEvent): void => {
 		if (this._touchActive) return;
 		this._touchActive = true;
-		this._touchId = touch.touchPointID;
-		this._touchStartX = touch.stageX;
-		this._touchStartY = touch.stageY;
-		this._touchLastX = touch.stageX;
-		this._touchLastY = touch.stageY;
+		this._touchId = e.touchPointID;
+		this._touchStartX = e.stageX;
+		this._touchStartY = e.stageY;
+		this._touchLastX = e.stageX;
+		this._touchLastY = e.stageY;
 		this._touchLastTime = Date.now();
 		this._scrollStarted = false;
 		this._samples = [];
@@ -296,24 +295,23 @@ export class ScrollView extends Sprite {
 		stage.addEventListener(TouchEvent.TOUCH_CANCEL, this._handleTouchEnd);
 	};
 
-	private _handleTouchMove = (e: Event): void => {
-		const touch = e as TouchEvent;
-		if (!this._touchActive || touch.touchPointID !== this._touchId) return;
+	private _handleTouchMove = (e: TouchEvent): void => {
+		if (!this._touchActive || e.touchPointID !== this._touchId) return;
 
 		if (!this._scrollStarted) {
-			const dx = touch.stageX - this._touchStartX;
-			const dy = touch.stageY - this._touchStartY;
+			const dx = e.stageX - this._touchStartX;
+			const dy = e.stageY - this._touchStartY;
 			if (Math.sqrt(dx * dx + dy * dy) < this.scrollBeginThreshold) return;
 			this._scrollStarted = true;
 		}
 
 		const now = Date.now();
 		const dt = now - this._touchLastTime || 1;
-		const dx = touch.stageX - this._touchLastX;
-		const dy = touch.stageY - this._touchLastY;
+		const dx = e.stageX - this._touchLastX;
+		const dy = e.stageY - this._touchLastY;
 
-		this._touchLastX = touch.stageX;
-		this._touchLastY = touch.stageY;
+		this._touchLastX = e.stageX;
+		this._touchLastY = e.stageY;
 		this._touchLastTime = now;
 
 		this._samples.push({ dx, dy, dt });
@@ -327,9 +325,8 @@ export class ScrollView extends Sprite {
 		this.dispatchEventWith(Event.CHANGE);
 	};
 
-	private _handleTouchEnd = (e: Event): void => {
-		const touch = e as TouchEvent;
-		if (!this._touchActive || touch.touchPointID !== this._touchId) return;
+	private _handleTouchEnd = (e: TouchEvent): void => {
+		if (!this._touchActive || e.touchPointID !== this._touchId) return;
 		this._touchActive = false;
 		this._detachStageListeners();
 
