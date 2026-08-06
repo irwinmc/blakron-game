@@ -137,7 +137,7 @@ export class ParticleSystem extends DisplayObject {
 	/**
 	 * Interval between particle emissions in ms.
 	 */
-	public emissionRate: number;
+	private _emissionRate: number;
 
 	/**
 	 * The texture used for each particle.
@@ -164,7 +164,7 @@ export class ParticleSystem extends DisplayObject {
 
 	public constructor(texture: Texture, emissionRate: number) {
 		super();
-		this.emissionRate = emissionRate;
+		this._emissionRate = this.validateEmissionRate(emissionRate);
 		this.texture = texture;
 		this.$renderObjectType = ParticleSystem.RENDER_TYPE_PARTICLE as RenderObjectType;
 	}
@@ -177,6 +177,14 @@ export class ParticleSystem extends DisplayObject {
 	 */
 	public get particles(): readonly Particle[] {
 		return this._particles;
+	}
+
+	/** Interval between particle emissions in milliseconds. Zero disables emission. */
+	public get emissionRate(): number {
+		return this._emissionRate;
+	}
+	public set emissionRate(value: number) {
+		this._emissionRate = this.validateEmissionRate(value);
 	}
 
 	/**
@@ -405,6 +413,13 @@ export class ParticleSystem extends DisplayObject {
 			return new this.particleClass();
 		}
 		return new Particle();
+	}
+
+	private validateEmissionRate(value: number): number {
+		if (!Number.isFinite(value) || value < 0) {
+			throw new RangeError('Particle emissionRate must be a finite non-negative number.');
+		}
+		return value;
 	}
 
 	private removeParticle(particle: Particle): boolean {

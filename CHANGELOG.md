@@ -4,6 +4,25 @@ All notable changes to `@blakron/game` are documented here.
 
 ---
 
+## [1.0.4] — 2026-08-06
+
+### Fixed
+
+- **ScrollView: lazy bounds refresh + per-axis scroll policy** — `scrollRight`/`scrollBottom`/`getMaxScrollLeft`/`getMaxScrollTop` now call `_updateScrollBounds()` on read, so bounds are always current even after content size changes without an explicit layout pass. `AUTO` policy now correctly disables scrolling on axes where the content fits within the viewport (`_canScrollHorizontally`/`_canScrollVertically`), and resets the scroll position to zero when content shrinks to fit. Inertia velocity is converted from pixels/ms to pixels/frame.
+- **ScrollView: touch tracking survives removal mid-gesture** — uses `_touchStage` (captured at touch-begin) instead of `this.stage` for listener detachment, so stage listeners are always cleaned up even if the view is removed from the display list during a gesture. `_cancelTouch()` centralises touch state reset.
+- **ParticleSystem: emissionRate validation** — `emissionRate` is now a getter/setter, rejecting `NaN`, `Infinity`, and negative values at construction and on assignment.
+
+### Dependencies
+
+- `@blakron/core`: `^1.0.5` → `^1.0.7`
+
+### Tests
+
+- `test/ScrollView.test.ts` — new (4 cases).
+- `test/ParticleSystem.test.ts` — new (3 cases).
+
+---
+
 ## [1.0.1] — 2026-07-27
 
 Type-safe event listeners, mirroring the `EventMap` work shipped in `@blakron/core` 1.0.2. The game package's own event sources now declare typed event maps so listeners receive the concrete `Event` subclass without manual `as` casts. No public API shape changes — existing `(e: Event) => void` callers keep working via the inherited fallback overload.

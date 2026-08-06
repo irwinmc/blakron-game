@@ -1,4 +1,4 @@
-import { Sprite, TouchEvent, Rectangle, Event } from '@blakron/core';
+import { Sprite, TouchEvent, Rectangle, Event, type Stage } from '@blakron/core';
 
 /**
  * Scroll policy constants for `ScrollView.horizontalScrollPolicy` and `verticalScrollPolicy`.
@@ -79,6 +79,7 @@ export class ScrollView extends Sprite {
 	// ── Touch tracking ────────────────────────────────────────────────────────
 
 	private _touchActive = false;
+	private _touchStage?: Stage;
 	private _touchId = -1;
 	private _touchLastX = 0;
 	private _touchLastY = 0;
@@ -145,6 +146,7 @@ export class ScrollView extends Sprite {
 	 * Maximum horizontal scroll distance (read-only).
 	 */
 	public get scrollRight(): number {
+		this._updateScrollBounds();
 		return this._maxScrollLeft;
 	}
 
@@ -152,6 +154,7 @@ export class ScrollView extends Sprite {
 	 * Maximum vertical scroll distance (read-only).
 	 */
 	public get scrollBottom(): number {
+		this._updateScrollBounds();
 		return this._maxScrollTop;
 	}
 
@@ -252,6 +255,7 @@ export class ScrollView extends Sprite {
 	 * Maximum horizontal scroll distance.
 	 */
 	public getMaxScrollLeft(): number {
+		this._updateScrollBounds();
 		return this._maxScrollLeft;
 	}
 
@@ -259,22 +263,31 @@ export class ScrollView extends Sprite {
 	 * Maximum vertical scroll distance.
 	 */
 	public getMaxScrollTop(): number {
+		this._updateScrollBounds();
 		return this._maxScrollTop;
 	}
 
 	// ── Override methods ──────────────────────────────────────────────────────
 
 	public override $onRemoveFromStage(): void {
-		super.$onRemoveFromStage();
+		this._cancelTouch();
 		this._stopInertia();
-		this._detachStageListeners();
+		this._stopTweenScroll();
+		super.$onRemoveFromStage();
 	}
 
 	// ── Private methods ───────────────────────────────────────────────────────
 
 	private _handleTouchBegin = (e: TouchEvent): void => {
 		if (this._touchActive) return;
+		const stage = this.stage;
+		if (!stage) return;
+
+		this._updateScrollBounds();
+		if (!this._canScrollHorizontally() && !this._canScrollVertically()) return;
+
 		this._touchActive = true;
+		this._touchStage = stage;
 		this._touchId = e.touchPointID;
 		this._touchStartX = e.stageX;
 		this._touchStartY = e.stageY;
@@ -288,8 +301,6 @@ export class ScrollView extends Sprite {
 		this._stopInertia();
 		this._stopTweenScroll();
 
-		const stage = this.stage;
-		if (!stage) return;
 		stage.addEventListener(TouchEvent.TOUCH_MOVE, this._handleTouchMove);
 		stage.addEventListener(TouchEvent.TOUCH_END, this._handleTouchEnd);
 		stage.addEventListener(TouchEvent.TOUCH_CANCEL, this._handleTouchEnd);
@@ -319,31 +330,36 @@ export class ScrollView extends Sprite {
 			this._samples.shift();
 		}
 
-		const newLeft = this._applyResistance(this._scrollLeft - dx * this.scrollSpeed, 0, this._maxScrollLeft);
-		const newTop = this._applyResistance(this._scrollTop - dy * this.scrollSpeed, 0, this._maxScrollTop);
+		const newLeft = this._canScrollHorizontally()
+			? this._applyResistance(this._scrollLeft - dx * this.scrollSpeed, 0, this._maxScrollLeft)
+			: 0;
+		const newTop = this._canScrollVertically()
+			? this._applyResistance(this._scrollTop - dy * this.scrollSpeed, 0, this._maxScrollTop)
+			: 0;
 		this._setScroll(newLeft, newTop, this.bounces);
 		this.dispatchEventWith(Event.CHANGE);
 	};
 
 	private _handleTouchEnd = (e: TouchEvent): void => {
 		if (!this._touchActive || e.touchPointID !== this._touchId) return;
-		this._touchActive = false;
-		this._detachStageListeners();
+		const samples = this._samples;
+		this._cancelTouch();
 
-		if (this._samples.length === 0) return;
+		if (samples.length === 0) return;
 
 		let totalWeight = 0;
 		let vx = 0;
 		let vy = 0;
-		for (let i = 0; i < this._samples.length; i++) {
+		for (let i = 0; i < samples.length; i++) {
 			const weight = i + 1;
-			const s = this._samples[i];
+			const s = samples[i];
 			vx += (s.dx / s.dt) * weight;
 			vy += (s.dy / s.dt) * weight;
 			totalWeight += weight;
 		}
-		this._velX = -(vx / totalWeight);
-		this._velY = -(vy / totalWeight);
+		// Samples are pixels/ms; inertia uses pixels/frame.
+		this._velX = this._canScrollHorizontally() ? -(vx / totalWeight) * FRAME_MS : 0;
+		this._velY = this._canScrollVertically() ? -(vy / totalWeight) * FRAME_MS : 0;
 		this._startInertia();
 	};
 
@@ -440,16 +456,21 @@ export class ScrollView extends Sprite {
 	}
 
 	private _setScroll(left: number, top: number, allowOverscroll = false): void {
+		this._updateScrollBounds();
 		if (!allowOverscroll) {
 			left = Math.max(0, Math.min(left, this._maxScrollLeft));
 			top = Math.max(0, Math.min(top, this._maxScrollTop));
 		}
 
-		if (this.horizontalScrollPolicy !== ScrollPolicy.OFF) {
+		if (this._canScrollHorizontally()) {
 			this._scrollLeft = left;
+		} else if (this.horizontalScrollPolicy === ScrollPolicy.AUTO) {
+			this._scrollLeft = 0;
 		}
-		if (this.verticalScrollPolicy !== ScrollPolicy.OFF) {
+		if (this._canScrollVertically()) {
 			this._scrollTop = top;
+		} else if (this.verticalScrollPolicy === ScrollPolicy.AUTO) {
+			this._scrollTop = 0;
 		}
 
 		if (this._content) {
@@ -482,11 +503,30 @@ export class ScrollView extends Sprite {
 		this._maxScrollTop = Math.max(0, this._content.height - this.height);
 	}
 
+	private _canScrollHorizontally(): boolean {
+		return this.horizontalScrollPolicy === ScrollPolicy.ON ||
+			(this.horizontalScrollPolicy === ScrollPolicy.AUTO && this._maxScrollLeft > 0);
+	}
+
+	private _canScrollVertically(): boolean {
+		return this.verticalScrollPolicy === ScrollPolicy.ON ||
+			(this.verticalScrollPolicy === ScrollPolicy.AUTO && this._maxScrollTop > 0);
+	}
+
 	private _detachStageListeners(): void {
-		const stage = this.stage;
+		const stage = this._touchStage;
 		if (!stage) return;
 		stage.removeEventListener(TouchEvent.TOUCH_MOVE, this._handleTouchMove);
 		stage.removeEventListener(TouchEvent.TOUCH_END, this._handleTouchEnd);
 		stage.removeEventListener(TouchEvent.TOUCH_CANCEL, this._handleTouchEnd);
+		this._touchStage = undefined;
+	}
+
+	private _cancelTouch(): void {
+		this._touchActive = false;
+		this._touchId = -1;
+		this._scrollStarted = false;
+		this._samples = [];
+		this._detachStageListeners();
 	}
 }
